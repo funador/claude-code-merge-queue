@@ -14,7 +14,17 @@
  *      fast-forwarded yet at the exact moment this runs. That's the literal
  *      definition of "nothing to lose": the work already made it upstream
  *      under its own name.
- *   2. `git worktree remove` (no `--force`) refuses on its own if the
+ *   2. Never touch a worktree with a LIVE process currently working in it
+ *      (checked via `lsof -a -d cwd`, see below) — this is NOT redundant
+ *      with the ancestor check. A brand-new lane that hasn't diverged yet
+ *      is *trivially* an ancestor of upstream (its tip IS a commit already
+ *      on the integration branch, just because nothing's been committed
+ *      there yet) — structurally identical, in the git graph alone, to a
+ *      lane whose own real work already landed. Only a liveness check can
+ *      tell "someone's about to start working here" apart from "this is
+ *      truly done." Confirmed live: a fresh, zero-commit lane got swept by
+ *      another lane's land before its own first commit.
+ *   3. `git worktree remove` (no `--force`) refuses on its own if the
  *      worktree has uncommitted changes — dirty work is never discarded
  *      just because its branch happens to be merged.
  * Deleting the now-redundant local branch (`git branch -d`, never `-D`) is a
@@ -24,10 +34,32 @@
  * That failure doesn't undo the (already-safe) worktree removal or keep it
  * out of the returned list; it just leaves a harmless leftover branch ref.
  */
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import type { LaneKeeperConfig } from "./config.js";
+
+/**
+ * Is any live process's current working directory inside `dir` right now?
+ * `lsof`'s own exit code is NOT reliable for this — it returns non-zero
+ * both when nothing matches AND when it merely fails to inspect some
+ * unrelated process it lacks permission for (common, e.g. root-owned system
+ * daemons), even while correctly printing real matches. The trustworthy
+ * signal is whether stdout has any content at all: genuinely idle
+ * directories produce completely empty output; a live process's cwd entry
+ * always prints a real row. `-a` ANDs the two filters together (lsof ORs by
+ * default) so this only matches things actually inside `dir`, not every
+ * process on the system.
+ *
+ * If `lsof` isn't available at all, this fails CLOSED — treats liveness as
+ * unknown/possible rather than confirmed-safe, so an unverifiable state
+ * never gets treated the same as a verified-idle one.
+ */
+function hasLiveProcessInside(dir: string): boolean {
+  const result = spawnSync("lsof", ["-a", "-d", "cwd", "+D", dir], { encoding: "utf8" });
+  if (result.error) return true; // lsof missing/unspawnable — can't verify, assume in use
+  return result.stdout.trim().length > 0;
+}
 
 interface WorktreeEntry {
   path: string;
@@ -107,6 +139,8 @@ export function pruneLandedLanes(
     } catch {
       continue; // not safe to touch — leave this lane exactly as it is
     }
+
+    if (hasLiveProcessInside(wt)) continue; // someone's actively in here — never touch it
 
     try {
       execFileSync("git", ["worktree", "remove", wt], { cwd: mainTop, stdio: "ignore" });

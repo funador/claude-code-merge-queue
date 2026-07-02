@@ -17,6 +17,8 @@ import { lanePort } from "../lib/lane-port.js";
 import { claudeMdSnippet, MARKER } from "../lib/claude-md-snippet.js";
 import { detectCheckCommand, runCheckCommand } from "../lib/check-command.js";
 import { wireClaudeSettings, wireHuskyPrePush, ensureHooksPath } from "../lib/wire-hooks.js";
+import { resolveMainCheckout } from "../lib/main-checkout.js";
+import { pruneLandedLanes } from "../lib/prune-lanes.js";
 
 const [, , command, ...rest] = process.argv;
 
@@ -183,6 +185,29 @@ async function main(): Promise<void> {
     case "promote":
       process.exit(await promote());
       return;
+    case "prune": {
+      // `land` already does this automatically as a side effect of every
+      // successful landing — this is the on-demand escape hatch for
+      // "clean these up right now" instead of waiting for the next lane to
+      // land something. Same safety rules apply: only already-merged
+      // branches, never anything with a live process inside, never the
+      // worktree this command itself is running from.
+      const root = findRepoRoot();
+      if (!root || !hasConfig(root)) {
+        console.error("lanekeeper prune: no lanekeeper.config found — nothing to do.");
+        process.exit(0);
+      }
+      const cfg = await loadConfig(root);
+      const mainTop = resolveMainCheckout(process.cwd());
+      const pruned = pruneLandedLanes(mainTop, cfg, process.cwd());
+      if (pruned.length === 0) {
+        console.log("lanekeeper prune: nothing to clean up — no already-landed sibling lanes found.");
+      } else {
+        const names = pruned.map((p) => p.split("/").pop()).join(", ");
+        console.log(`lanekeeper prune: removed ${pruned.length} already-landed lane${pruned.length === 1 ? "" : "s"}: ${names}`);
+      }
+      return;
+    }
     case "preview":
       return runPreview(rest);
     case "build-lock": {

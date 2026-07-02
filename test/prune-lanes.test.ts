@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -159,3 +159,48 @@ test("pruneLandedLanes ignores worktrees that don't match this repo's lane namin
     rmSync(mainTop, { recursive: true, force: true });
   }
 });
+
+test("pruneLandedLanes never removes a lane with a live process cwd'd into it, even a brand-new lane trivially 'merged' because it hasn't diverged yet", async () => {
+  // The exact bug this closes: a fresh lane with ZERO commits is trivially
+  // an ancestor of upstream (its tip IS already a commit on the integration
+  // branch) — structurally identical, in the git graph alone, to a lane
+  // whose real work already landed. Confirmed live: this swept a fresh
+  // lane out from under whoever was about to start using it.
+  const { mainTop } = makeRepoWithRemote();
+  const child = spawnSyncHelper();
+  try {
+    const freshLane = addLaneWorktree(mainTop, 1); // zero commits beyond main — "merged" only because it never diverged
+    const proc = child.spawn("sleep", ["30"], { cwd: freshLane });
+    await child.waitUntilCwdVisible(freshLane);
+
+    const pruned = pruneLandedLanes(mainTop, cfg, "/some/other/currently-active-lane");
+
+    assert.deepEqual(pruned, [], "a lane with a live process inside must never be pruned, regardless of merge status");
+    assert.ok(existsSync(freshLane));
+    proc.kill();
+  } finally {
+    rmSync(mainTop, { recursive: true, force: true });
+  }
+});
+
+// Minimal helper: spawn a real long-lived process with a given cwd, and
+// poll `lsof` (the same tool prune-lanes.ts itself uses) until it actually
+// shows up — spawning is asynchronous from the OS's perspective, so a
+// fixed sleep would be a flaky guess instead of an actual confirmation.
+function spawnSyncHelper() {
+  return {
+    spawn(cmd: string, args: string[], opts: { cwd: string }) {
+      return spawn(cmd, args, { cwd: opts.cwd, stdio: "ignore" });
+    },
+    async waitUntilCwdVisible(dir: string): Promise<void> {
+      // lsof's own exit code is unreliable (see prune-lanes.ts) — check
+      // stdout content, not the exit status.
+      for (let i = 0; i < 50; i++) {
+        const out = spawnSync("lsof", ["-a", "-d", "cwd", "+D", dir], { encoding: "utf8" }).stdout.trim();
+        if (out) return;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      throw new Error(`lsof never showed a live process in ${dir} — test setup itself is broken, not just slow`);
+    },
+  };
+}

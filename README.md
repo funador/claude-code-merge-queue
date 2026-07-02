@@ -60,6 +60,7 @@ locally instead of in someone else's billed cloud. 💸
 | `lanekeeper promote` | Ships the integration branch to production. **Human-only** — never in an agent's instructions, never automated. |
 | `lanekeeper preview` | Instantly mirrors a lane's live working tree — uncommitted changes included — onto the main checkout, so you can look at it without a build. |
 | `lanekeeper port` | Prints a lane's dev-server port, derived from its own directory name. |
+| `lanekeeper prune` | Removes already-landed sibling lane worktrees on demand — `land` already does this automatically, this is for "clean these up right now" instead of waiting for the next lane to land something. |
 
 Plus 🔒 a pre-push hook that makes `land` non-optional: a direct `git push`
 straight to the integration branch gets bounced, full stop. Not a lint
@@ -259,6 +260,12 @@ Things a sharp reader should already know before they ask:
   CLAUDE.md tells it to resolve the conflict itself and re-run `land`, the
   same way it'd fix any other bug — `checkCommand` still gates the result
   either way, so a bad resolution gets caught there.
+- **Auto-pruning checks for a live process, via `lsof`.** A merged branch
+  alone isn't enough to prune a lane — a brand-new, zero-commit lane is
+  *trivially* "merged" too (nothing's diverged yet), so pruning also
+  refuses to touch any worktree with a live process's cwd inside it right
+  now. That check needs `lsof` on PATH; if it's missing, pruning fails
+  closed (treats liveness as unknown, never removes) rather than guessing.
 
 ## 🧬 Where this came from
 
