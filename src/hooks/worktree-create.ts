@@ -83,15 +83,20 @@ export function createLane(mainTop: string, cfg: LaneKeeperConfig): { wt: string
     const branch = `${cfg.branchPrefix}${lane}`;
     const branchExists = tryGit(["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], mainTop).ok;
 
+    // Base every new lane on the main checkout's own current HEAD — never on
+    // origin/integrationBranch. The main checkout is kept fast-forwarded by
+    // `sync` precisely so its local HEAD IS the trusted, up-to-date view;
+    // reading origin directly instead can be *behind* local HEAD (a commit
+    // made here but not yet pushed) and silently drop it from every new
+    // lane. That's not a hypothetical: it breaks the literal Quickstart —
+    // `init` writes lanekeeper.config.mjs/CLAUDE.md/.claude locally, and the
+    // very first lane created before that commit is pushed anywhere would
+    // otherwise come up with none of it.
     let add;
     if (branchExists) {
       add = tryGit(["worktree", "add", wt, branch], mainTop);
     } else {
-      tryGit(["fetch", "origin", cfg.integrationBranch, "--quiet"], mainTop);
-      const haveRemote = tryGit(["show-ref", "--verify", "--quiet", `refs/remotes/origin/${cfg.integrationBranch}`], mainTop).ok;
-      add = haveRemote
-        ? tryGit(["worktree", "add", wt, "-b", branch, `origin/${cfg.integrationBranch}`], mainTop)
-        : tryGit(["worktree", "add", wt, "-b", branch], mainTop);
+      add = tryGit(["worktree", "add", wt, "-b", branch], mainTop);
     }
 
     if (!add.ok) {

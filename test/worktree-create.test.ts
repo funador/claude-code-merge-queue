@@ -52,6 +52,29 @@ test("createLane claims sequential lane numbers and creates real worktrees", () 
   }
 });
 
+test("createLane bases a new lane on the main checkout's own HEAD, not a stale origin/integrationBranch", () => {
+  const mainTop = makeScratchRepo();
+  const remote = mkdtempSync(join(tmpdir(), "lanekeeper-wt-remote-"));
+  try {
+    execFileSync("git", ["init", "-q", "--bare", remote]);
+    execFileSync("git", ["branch", "-M", "main"], { cwd: mainTop });
+    execFileSync("git", ["remote", "add", "origin", remote], { cwd: mainTop });
+    execFileSync("git", ["push", "-q", "origin", "main"], { cwd: mainTop });
+
+    // A commit made locally but never pushed — e.g. `lanekeeper init`'s own
+    // wiring commit, right after Quickstart, before anyone has pushed it.
+    execFileSync("node", ["-e", "require('fs').writeFileSync('lanekeeper.config.mjs', 'x')"], { cwd: mainTop });
+    execFileSync("git", ["add", "-A"], { cwd: mainTop });
+    execFileSync("git", ["commit", "-q", "-m", "local-only wiring commit"], { cwd: mainTop });
+
+    const { wt } = createLane(mainTop, { ...DEFAULTS, integrationBranch: "main" });
+    assert.ok(existsSync(join(wt, "lanekeeper.config.mjs")), "new lane must inherit the unpushed local commit, not fall back to stale origin/main");
+  } finally {
+    cleanupRepoAndLanes(mainTop);
+    rmSync(remote, { recursive: true, force: true });
+  }
+});
+
 test("concurrent WorktreeCreate hook invocations never collide on the same lane", async () => {
   const mainTop = makeScratchRepo();
   try {
