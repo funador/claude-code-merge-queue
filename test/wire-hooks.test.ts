@@ -1,12 +1,19 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { wireClaudeSettings, wireHuskyPrePush } from "../src/lib/wire-hooks.js";
+import { wireClaudeSettings, wireHuskyPrePush, ensureHooksPath } from "../src/lib/wire-hooks.js";
 
 function scratchDir(): string {
   return mkdtempSync(join(tmpdir(), "lanekeeper-wire-"));
+}
+
+function scratchGitRepo(): string {
+  const dir = scratchDir();
+  execFileSync("git", ["init", "-q"], { cwd: dir });
+  return dir;
 }
 
 test("wireClaudeSettings creates .claude/settings.json from scratch", () => {
@@ -115,6 +122,37 @@ test("wireHuskyPrePush is idempotent", () => {
     mkdirSync(join(dir, ".husky"));
     wireHuskyPrePush(dir);
     assert.equal(wireHuskyPrePush(dir), "already-wired");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("ensureHooksPath sets core.hooksPath when unset — the fresh-clone case where a .husky/pre-push file would otherwise be silently inert", () => {
+  const dir = scratchGitRepo();
+  try {
+    assert.equal(ensureHooksPath(dir), "set");
+    assert.equal(execFileSync("git", ["config", "core.hooksPath"], { cwd: dir, encoding: "utf8" }).trim(), ".husky");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("ensureHooksPath is idempotent once set", () => {
+  const dir = scratchGitRepo();
+  try {
+    ensureHooksPath(dir);
+    assert.equal(ensureHooksPath(dir), "already-set");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("ensureHooksPath leaves a deliberate custom hooksPath alone", () => {
+  const dir = scratchGitRepo();
+  try {
+    execFileSync("git", ["config", "core.hooksPath", "custom-hooks-dir"], { cwd: dir });
+    assert.equal(ensureHooksPath(dir), "custom-path");
+    assert.equal(execFileSync("git", ["config", "core.hooksPath"], { cwd: dir, encoding: "utf8" }).trim(), "custom-hooks-dir");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

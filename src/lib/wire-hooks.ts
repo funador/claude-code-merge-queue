@@ -10,6 +10,7 @@
  * there. Neither ever overwrites content that isn't ours.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, chmodSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -100,4 +101,32 @@ export function wireHuskyPrePush(root: string): WireResult {
   appendFileSync(path, `\n${marker}\n${functionalSnippet(template)}`);
   chmodSync(path, 0o755);
   return "merged";
+}
+
+export type HooksPathResult = "set" | "already-set" | "custom-path";
+
+/**
+ * A `.husky/pre-push` file on disk enforces nothing on its own — git only
+ * runs it if `core.hooksPath` points at `.husky`, which is normally set as
+ * a side effect of the package manager's install step (husky's own
+ * `prepare` script). On a freshly cloned repo where nobody's run that
+ * install yet — the exact state Quickstart leaves you in right after
+ * `init` — the file is silently inert and a direct push sails through
+ * uncontested. Since Lane Keeper is the one promising "pushes are gated
+ * now," it sets this itself instead of depending on a step that may not
+ * have happened yet, mirroring exactly what `husky install` itself does.
+ */
+export function ensureHooksPath(root: string): HooksPathResult {
+  let current: string | null;
+  try {
+    current = execFileSync("git", ["config", "core.hooksPath"], { cwd: root, encoding: "utf8" }).trim();
+  } catch {
+    current = null; // unset
+  }
+
+  if (current === ".husky") return "already-set";
+  if (current) return "custom-path"; // respect an existing deliberate setup — don't override it
+
+  execFileSync("git", ["config", "core.hooksPath", ".husky"], { cwd: root });
+  return "set";
 }

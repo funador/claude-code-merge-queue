@@ -16,7 +16,7 @@ import { runWorktreeCreateHook } from "../hooks/worktree-create.js";
 import { lanePort } from "../lib/lane-port.js";
 import { claudeMdSnippet, MARKER } from "../lib/claude-md-snippet.js";
 import { detectCheckCommand, runCheckCommand } from "../lib/check-command.js";
-import { wireClaudeSettings, wireHuskyPrePush } from "../lib/wire-hooks.js";
+import { wireClaudeSettings, wireHuskyPrePush, ensureHooksPath } from "../lib/wire-hooks.js";
 
 const [, , command, ...rest] = process.argv;
 
@@ -119,6 +119,25 @@ export default ${JSON.stringify(generated, null, 2)};
       console.log("  Install Husky, or copy node_modules/lane-keeper/hooks/pre-push to .git/hooks/pre-push");
       console.log("  yourself (note: .git/hooks isn't version-controlled — only Husky's is shared with your team).");
       break;
+  }
+
+  if (prePushResult === "created" || prePushResult === "merged" || prePushResult === "already-wired") {
+    // A .husky/pre-push file enforces nothing until core.hooksPath actually
+    // points at .husky — normally a side effect of the package manager's
+    // install step, which may not have run yet (e.g. a fresh clone, right
+    // where Quickstart leaves you). Without this, a direct push sails
+    // through uncontested with no indication anything's wrong.
+    switch (ensureHooksPath(root)) {
+      case "set":
+        console.log("lanekeeper init: set core.hooksPath=.husky so the pre-push hook actually runs (normally set by `npm install`, which may not have run yet).");
+        break;
+      case "already-set":
+        break; // the common case once installed — nothing to say
+      case "custom-path":
+        console.log("lanekeeper init: core.hooksPath is set to something other than .husky — leaving it alone.");
+        console.log("  Wrote .husky/pre-push, but it won't run until your hooks path points there. Reconcile this yourself.");
+        break;
+    }
   }
 
   console.log("");
