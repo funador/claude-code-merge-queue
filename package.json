@@ -8,7 +8,7 @@
   "homepage": "https://github.com/funador/lanekeeper",
   "repository": {
     "type": "git",
-    "url": "https://github.com/funador/lanekeeper.git"
+    "url": "git+https://github.com/funador/lanekeeper.git"
   },
   "keywords": [
     "claude-code",
@@ -20,7 +20,7 @@
     "monorepo-tooling"
   ],
   "bin": {
-    "lanekeeper": "./dist/bin/lanekeeper.js"
+    "lanekeeper": "dist/bin/lanekeeper.js"
   },
   "files": [
     "dist",
