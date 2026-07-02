@@ -1,0 +1,42 @@
+<svg width="1200" height="340" viewBox="0 0 1200 340" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Lane Keeper — keep parallel coding agents in their lane">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0b1120"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="340" rx="18" fill="url(#bg)"/>
+  <rect x="1" y="1" width="1198" height="338" rx="17" fill="none" stroke="#1e293b" stroke-width="2"/>
+
+  <text x="600" y="54" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="40" font-weight="700" fill="#f8fafc">🛟 LANE KEEPER</text>
+  <text x="600" y="82" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" fill="#94a3b8">keep parallel coding agents in their lane — one worktree each, zero races</text>
+
+  <!-- Lane 1 -->
+  <text x="24" y="133" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" fill="#64748b">lane/1</text>
+  <rect x="108" y="108" width="1068" height="40" rx="8" fill="#111827"/>
+  <line x1="120" y1="128" x2="1164" y2="128" stroke="#334155" stroke-width="2" stroke-dasharray="10 8"/>
+  <rect x="120" y="125" width="240" height="6" rx="3" fill="#fb923c" opacity="0.28"/>
+  <circle cx="360" cy="128" r="10" fill="#fb923c"/>
+
+  <!-- Lane 2 -->
+  <text x="24" y="187" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" fill="#64748b">lane/2</text>
+  <rect x="108" y="162" width="1068" height="40" rx="8" fill="#0f172a"/>
+  <line x1="120" y1="182" x2="1164" y2="182" stroke="#334155" stroke-width="2" stroke-dasharray="10 8"/>
+  <rect x="120" y="179" width="460" height="6" rx="3" fill="#22d3ee" opacity="0.28"/>
+  <circle cx="580" cy="182" r="10" fill="#22d3ee"/>
+
+  <!-- Lane 3 -->
+  <text x="24" y="241" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" fill="#64748b">lane/3</text>
+  <rect x="108" y="216" width="1068" height="40" rx="8" fill="#111827"/>
+  <line x1="120" y1="236" x2="1164" y2="236" stroke="#334155" stroke-width="2" stroke-dasharray="10 8"/>
+  <rect x="120" y="233" width="700" height="6" rx="3" fill="#a78bfa" opacity="0.28"/>
+  <circle cx="820" cy="236" r="10" fill="#a78bfa"/>
+
+  <!-- Lane 4 -->
+  <text x="24" y="295" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" fill="#64748b">lane/4</text>
+  <rect x="108" y="270" width="1068" height="40" rx="8" fill="#0f172a"/>
+  <line x1="120" y1="290" x2="1164" y2="290" stroke="#334155" stroke-width="2" stroke-dasharray="10 8"/>
+  <rect x="120" y="287" width="140" height="6" rx="3" fill="#34d399" opacity="0.28"/>
+  <circle cx="260" cy="290" r="10" fill="#34d399"/>
+</svg>
