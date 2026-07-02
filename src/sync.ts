@@ -17,7 +17,7 @@
  *     retries. Any other dirty file → warn and skip.
  */
 import { execFileSync } from "node:child_process";
-import { loadConfig } from "./lib/config.js";
+import { loadConfig, type LaneKeeperConfig } from "./lib/config.js";
 import { resolveMainCheckout } from "./lib/main-checkout.js";
 
 const LOCK_RETRIES = 3;
@@ -47,8 +47,21 @@ function sleep(ms: number): void {
   }
 }
 
-/** Fast-forwards the MAIN checkout. Returns a process exit code; never throws. */
-export async function sync(): Promise<number> {
+/**
+ * Fast-forwards the MAIN checkout. Returns a process exit code; never throws.
+ *
+ * Accepts an already-loaded config, for `land` calling this immediately
+ * after a push that ITSELF introduced or changed lanekeeper.config.mjs: the
+ * MAIN checkout hasn't been fast-forwarded yet at that exact moment (that's
+ * this function's whole job), so loading fresh from MAIN would silently
+ * fall back to DEFAULTS and could reject a perfectly good sync — the same
+ * bootstrap gap createLane had to be fixed for. The lane's own config,
+ * which just successfully rebased onto and pushed to the real
+ * integrationBranch, is the more trustworthy answer at that moment. A bare
+ * `lanekeeper sync` (no caller-provided config) still loads fresh from
+ * MAIN, same as before.
+ */
+export async function sync(providedCfg?: LaneKeeperConfig): Promise<number> {
   let MAIN: string;
   try {
     MAIN = resolveMainCheckout(process.cwd());
@@ -57,7 +70,7 @@ export async function sync(): Promise<number> {
     return 0;
   }
 
-  const cfg = await loadConfig(MAIN);
+  const cfg = providedCfg ?? (await loadConfig(MAIN));
   const regenerable = new Set(cfg.regenerableFiles);
 
   const branchRes = git(MAIN, ["rev-parse", "--abbrev-ref", "HEAD"], { allowFail: true });

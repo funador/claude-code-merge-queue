@@ -106,8 +106,13 @@ export async function land(): Promise<void> {
         // Landing isn't "done" until the checkout that actually serves your
         // dev server can see it — call sync in-process rather than shelling
         // back out to the CLI, so this doesn't depend on `lanekeeper` being
-        // resolvable on PATH.
-        exitCode = await sync();
+        // resolvable on PATH. Pass this lane's own already-loaded cfg through
+        // rather than letting sync() reload from MAIN — MAIN hasn't been
+        // fast-forwarded yet at this exact moment (that's what sync is about
+        // to do), so if this push just introduced or changed
+        // lanekeeper.config.mjs itself, a fresh MAIN-side load would silently
+        // fall back to DEFAULTS instead of the real config.
+        exitCode = await sync(cfg);
 
         // Housekeeping, never a reason to fail this landing: sweep sibling
         // lanes whose OWN branch already made it upstream (nothing created
