@@ -35,14 +35,30 @@ test("detectCheckCommand falls back to test when nothing else is present", () =>
 });
 
 test("runCheckCommand fails when checkCommand is null and checksRequired is true", () => {
-  assert.equal(runCheckCommand({ checkCommand: null, checksRequired: true }), 1);
+  assert.equal(runCheckCommand({ checkCommand: null, checksRequired: true }, process.cwd()), 1);
 });
 
 test("runCheckCommand succeeds when checkCommand is null and checksRequired is false", () => {
-  assert.equal(runCheckCommand({ checkCommand: null, checksRequired: false }), 0);
+  assert.equal(runCheckCommand({ checkCommand: null, checksRequired: false }, process.cwd()), 0);
 });
 
 test("runCheckCommand propagates the command's real exit code", () => {
-  assert.equal(runCheckCommand({ checkCommand: "exit 0", checksRequired: true }), 0);
-  assert.equal(runCheckCommand({ checkCommand: "exit 7", checksRequired: true }), 7);
+  assert.equal(runCheckCommand({ checkCommand: "exit 0", checksRequired: true }, process.cwd()), 0);
+  assert.equal(runCheckCommand({ checkCommand: "exit 7", checksRequired: true }, process.cwd()), 7);
+});
+
+test("runCheckCommand always runs from `root`, regardless of the caller's own cwd", () => {
+  const dir = mkdtempSync(join(tmpdir(), "lanekeeper-checkcwd-"));
+  const startCwd = process.cwd();
+  try {
+    // A script whose success depends on running from `dir` specifically —
+    // proves the command isn't accidentally inheriting the caller's cwd.
+    writeFileSync(join(dir, "marker.txt"), "here\n");
+    process.chdir(tmpdir()); // simulate being invoked from somewhere else entirely
+    const code = runCheckCommand({ checkCommand: "test -f marker.txt", checksRequired: true }, dir);
+    assert.equal(code, 0);
+  } finally {
+    process.chdir(startCwd);
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

@@ -33,8 +33,16 @@ export function detectCheckCommand(root: string): string | null {
  * turned off — the default is to FAIL the push, because a merge queue that
  * lets unverified code through by default isn't one, it's a false sense of
  * safety.
+ *
+ * Always runs from `root`, not whatever the caller's cwd happens to be. In
+ * the real git-push flow that's moot — git always resets cwd to the repo
+ * root before running a hook — but `check-push` is also a directly
+ * user-runnable command, and silently depending on git's hook behavior for
+ * correctness (instead of just being correct on its own) is exactly the
+ * kind of implicit assumption that bites the first time someone runs it by
+ * hand from a subdirectory.
  */
-export function runCheckCommand(cfg: Pick<LaneKeeperConfig, "checkCommand" | "checksRequired">): number {
+export function runCheckCommand(cfg: Pick<LaneKeeperConfig, "checkCommand" | "checksRequired">, root: string): number {
   if (!cfg.checkCommand) {
     if (cfg.checksRequired) {
       console.error([
@@ -53,7 +61,7 @@ export function runCheckCommand(cfg: Pick<LaneKeeperConfig, "checkCommand" | "ch
   }
 
   console.log(`lanekeeper check-push: running "${cfg.checkCommand}"…`);
-  const result = spawnSync(cfg.checkCommand, { shell: true, stdio: "inherit" });
+  const result = spawnSync(cfg.checkCommand, { shell: true, stdio: "inherit", cwd: root });
   if (result.status !== 0) {
     console.error(`\n✋ checkCommand failed (exit ${result.status ?? 1}) — landing blocked.`);
   }

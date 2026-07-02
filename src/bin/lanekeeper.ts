@@ -209,7 +209,7 @@ async function main(): Promise<void> {
         console.error(result.message);
         process.exit(1);
       }
-      process.exit(runCheckCommand(cfg));
+      process.exit(runCheckCommand(cfg, root));
       return;
     }
     case "--version":
