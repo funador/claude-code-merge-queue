@@ -225,6 +225,38 @@ Either way: no stale locks, no "just restart your laptop," no magic number
 for how long is too long to wait. ✅ Structurally impossible beats politely
 requested, every time.
 
+## 🔍 Know the limits
+
+Things a sharp reader should already know before they ask:
+
+- **One machine, not a fleet.** The FIFO queue lives in local temp storage —
+  it doesn't coordinate across laptops. Two machines landing at the same
+  moment just get git's own ordinary non-fast-forward rejection (safe, not
+  corrupting — the loser re-fetches and retries, same as any team without a
+  queue does today). This solves the one-machine problem completely; it was
+  never trying to solve the distributed one.
+- **Not a security boundary.** Every guardrail here stops mistakes and
+  convention drift — a fast, confident, forgetful agent — not a truly
+  adversarial one. An agent with shell access can always `git push
+  --no-verify`, delete the hook, or edit the config on purpose. If your
+  threat model includes an agent actively trying to get around this, none
+  of this helps, and nothing local-only ever could.
+- **Guarantees a check ran — not that the check is good.** Lane Keeper
+  enforces that `checkCommand` exists and passed. It has no way to know if
+  that's a real test suite or `echo ok`. "Tests are the reviewer" is only
+  as true as what's actually in them.
+- **The `WorktreeCreate` hook is the youngest piece of this stack** — Claude
+  Code shipped it Feb 2026. Losing it degrades gracefully: fall back to
+  `git worktree add` by hand and you still keep the build queue, landing
+  queue, preview, and ephemeral-resource pieces, none of which depend on it.
+- **A slow `checkCommand` is a real throughput ceiling, not a free lunch.**
+  The FIFO lock holds for its entire duration — one landing at a time,
+  machine-wide. A 3–4 minute suite caps you well under 20 landings/hour
+  flat-out, before any queue wait.
+- **Rebase conflicts abort, they never guess.** `git rebase --abort` on any
+  conflict — `land` tells you to resolve it yourself. It never auto-resolves
+  or silently picks a side.
+
 ## 🧬 Where this came from
 
 This is the extracted, generalized shape of tooling built to run several
