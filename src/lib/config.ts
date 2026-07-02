@@ -78,6 +78,27 @@ export const DEFAULTS: LaneKeeperConfig = {
   buildOutputDirs: ["dist", "build", ".next"],
 };
 
+/**
+ * The repo's actual current branch, so `init` doesn't blindly assume "main"
+ * — plenty of real repos still default to "master" (or something else
+ * entirely), and a generated config pointing at a branch that doesn't exist
+ * is exactly the kind of out-of-the-box friction this tool exists to avoid.
+ * Returns null (letting the caller fall back to DEFAULTS) if there's no
+ * commit yet or HEAD is detached.
+ */
+export function detectCurrentBranch(cwd: string = process.cwd()): string | null {
+  try {
+    const branch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+    return branch && branch !== "HEAD" ? branch : null;
+  } catch {
+    return null;
+  }
+}
+
 export function findRepoRoot(cwd: string = process.cwd()): string | null {
   try {
     return execFileSync("git", ["rev-parse", "--show-toplevel"], {
