@@ -1,63 +1,61 @@
-<svg width="1200" height="360" viewBox="0 0 1200 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Lane Keeper — four lanes of parallel agents merging one at a time into a single integration branch">
+<svg width="1200" height="420" viewBox="0 0 1200 420" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Lane Keeper — four lanes of parallel agents, each landing on the shared integration branch at a different point in time">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#0b1120"/>
       <stop offset="100%" stop-color="#0f172a"/>
     </linearGradient>
-    <linearGradient id="mergeGrad" x1="900" y1="0" x2="1164" y2="0" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#fb923c"/>
-      <stop offset="33%" stop-color="#22d3ee"/>
-      <stop offset="66%" stop-color="#a78bfa"/>
-      <stop offset="100%" stop-color="#34d399"/>
-    </linearGradient>
   </defs>
 
-  <rect x="0" y="0" width="1200" height="360" rx="18" fill="url(#bg)"/>
-  <rect x="1" y="1" width="1198" height="358" rx="17" fill="none" stroke="#1e293b" stroke-width="2"/>
+  <rect x="0" y="0" width="1200" height="420" rx="18" fill="url(#bg)"/>
+  <rect x="1" y="1" width="1198" height="418" rx="17" fill="none" stroke="#1e293b" stroke-width="2"/>
 
   <text x="600" y="54" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="40" font-weight="700" fill="#f8fafc">🛟 LANE KEEPER</text>
   <text x="600" y="82" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" fill="#94a3b8">the local, zero-cost merge queue for parallel Claude Code agents</text>
 
-  <!-- Lane background bands -->
+  <!-- Row backgrounds — 4 lanes plus the integration branch they all land on -->
   <rect x="108" y="108" width="1068" height="40" rx="8" fill="#111827"/>
   <rect x="108" y="162" width="1068" height="40" rx="8" fill="#0f172a"/>
   <rect x="108" y="216" width="1068" height="40" rx="8" fill="#111827"/>
   <rect x="108" y="270" width="1068" height="40" rx="8" fill="#0f172a"/>
+  <rect x="108" y="324" width="1068" height="40" rx="8" fill="#111827"/>
 
-  <!-- Lane 1 — orange, converges into the queue -->
+  <!-- The integration branch — one line, present the whole time, every lane lands onto it -->
+  <text x="24" y="349" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" fill="#64748b">queue</text>
+  <line x1="120" y1="344" x2="1164" y2="344" stroke="#94a3b8" stroke-width="3"/>
+
+  <!-- Lane 1 — orange, lands 3rd -->
   <text x="24" y="133" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" fill="#64748b">lane/1</text>
   <line x1="120" y1="128" x2="320" y2="128" stroke="#334155" stroke-width="2" stroke-dasharray="10 8"/>
   <rect x="120" y="125" width="200" height="6" rx="3" fill="#fb923c" opacity="0.28"/>
-  <path d="M320,128 Q 610,128 900,209" fill="none" stroke="#fb923c" stroke-width="2.5" stroke-dasharray="6 6" opacity="0.85"/>
+  <path d="M320,128 C 548,128 660,344 700,344" fill="none" stroke="#fb923c" stroke-width="2.5" stroke-dasharray="6 6" opacity="0.85"/>
   <circle cx="320" cy="128" r="9" fill="#fb923c"/>
 
-  <!-- Lane 2 — cyan, converges into the queue -->
+  <!-- Lane 2 — cyan, lands 4th (most recent) -->
   <text x="24" y="187" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" fill="#64748b">lane/2</text>
   <line x1="120" y1="182" x2="460" y2="182" stroke="#334155" stroke-width="2" stroke-dasharray="10 8"/>
   <rect x="120" y="179" width="340" height="6" rx="3" fill="#22d3ee" opacity="0.28"/>
-  <path d="M460,182 Q 680,182 900,209" fill="none" stroke="#22d3ee" stroke-width="2.5" stroke-dasharray="6 6" opacity="0.85"/>
+  <path d="M460,182 C 724,182 860,344 900,344" fill="none" stroke="#22d3ee" stroke-width="2.5" stroke-dasharray="6 6" opacity="0.85"/>
   <circle cx="460" cy="182" r="9" fill="#22d3ee"/>
 
-  <!-- Lane 3 — purple, converges into the queue -->
+  <!-- Lane 3 — purple, lands 5th (latest so far) -->
   <text x="24" y="241" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" fill="#64748b">lane/3</text>
   <line x1="120" y1="236" x2="620" y2="236" stroke="#334155" stroke-width="2" stroke-dasharray="10 8"/>
   <rect x="120" y="233" width="500" height="6" rx="3" fill="#a78bfa" opacity="0.28"/>
-  <path d="M620,236 Q 760,236 900,209" fill="none" stroke="#a78bfa" stroke-width="2.5" stroke-dasharray="6 6" opacity="0.85"/>
+  <path d="M620,236 C 896,236 1040,344 1080,344" fill="none" stroke="#a78bfa" stroke-width="2.5" stroke-dasharray="6 6" opacity="0.85"/>
   <circle cx="620" cy="236" r="9" fill="#a78bfa"/>
 
-  <!-- Lane 4 — green, converges into the queue -->
+  <!-- Lane 4 — green, lands 1st (earliest) -->
   <text x="24" y="295" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" fill="#64748b">lane/4</text>
   <line x1="120" y1="290" x2="260" y2="290" stroke="#334155" stroke-width="2" stroke-dasharray="10 8"/>
   <rect x="120" y="287" width="140" height="6" rx="3" fill="#34d399" opacity="0.28"/>
-  <path d="M260,290 Q 590,290 900,209" fill="none" stroke="#34d399" stroke-width="2.5" stroke-dasharray="6 6" opacity="0.85"/>
+  <path d="M260,290 C 404,290 460,344 500,344" fill="none" stroke="#34d399" stroke-width="2.5" stroke-dasharray="6 6" opacity="0.85"/>
   <circle cx="260" cy="290" r="9" fill="#34d399"/>
 
-  <!-- The merge point: every lane lands here, one at a time -->
-  <circle cx="900" cy="209" r="7" fill="#f8fafc" stroke="#0b1120" stroke-width="2"/>
+  <!-- Landing points — where each lane actually joins the queue, at its own point in time -->
+  <circle cx="500" cy="344" r="7" fill="#34d399" stroke="#0b1120" stroke-width="2"/>
+  <circle cx="700" cy="344" r="7" fill="#fb923c" stroke="#0b1120" stroke-width="2"/>
+  <circle cx="900" cy="344" r="7" fill="#22d3ee" stroke="#0b1120" stroke-width="2"/>
+  <circle cx="1080" cy="344" r="7" fill="#a78bfa" stroke="#0b1120" stroke-width="2"/>
 
-  <!-- The single, serialized integration branch -->
-  <line x1="900" y1="209" x2="1164" y2="209" stroke="url(#mergeGrad)" stroke-width="3"/>
-  <circle cx="1040" cy="209" r="7" fill="#f8fafc"/>
-
-  <text x="600" y="332" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#64748b">🔒 every lane lands through the same queue — one push at a time</text>
+  <text x="600" y="398" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#64748b">🔒 every lane lands through the same queue — one push at a time, never at once</text>
 </svg>
