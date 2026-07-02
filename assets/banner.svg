@@ -9,7 +9,7 @@
   <rect x="0" y="0" width="1200" height="420" rx="18" fill="url(#bg)"/>
   <rect x="1" y="1" width="1198" height="418" rx="17" fill="none" stroke="#1e293b" stroke-width="2"/>
 
-  <text x="600" y="54" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="40" font-weight="700" fill="#f8fafc">🛟 LANEKEEPER</text>
+  <text x="600" y="54" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="40" font-weight="700" fill="#f8fafc">🚦 LANEKEEPER</text>
   <text x="600" y="82" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" fill="#94a3b8">the local, zero-cost merge queue for parallel Claude Code agents</text>
 
   <!-- Row backgrounds — 4 lanes plus the integration branch they all land on -->

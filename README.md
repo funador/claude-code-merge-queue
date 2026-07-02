@@ -9,7 +9,7 @@
   <img alt="Runtime deps" src="https://img.shields.io/badge/runtime%20deps-0-brightgreen.svg">
 </p>
 
-# LaneKeeper 🛟
+# LaneKeeper 🚦
 
 **The local, zero-cost merge queue for parallel Claude Code agents.**
 

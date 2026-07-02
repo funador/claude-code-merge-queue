@@ -30,6 +30,8 @@
 import { execSync, spawnSync } from "node:child_process";
 import { createQueueLock } from "./lib/queue-lock.js";
 import { hasConfig, loadConfig } from "./lib/config.js";
+import { resolveMainCheckout } from "./lib/main-checkout.js";
+import { pruneLandedLanes } from "./lib/prune-lanes.js";
 import { sync } from "./sync.js";
 
 const DIM = "\x1b[2m", RESET = "\x1b[0m", RED = "\x1b[31m", GREEN = "\x1b[32m";
@@ -106,6 +108,21 @@ export async function land(): Promise<void> {
         // back out to the CLI, so this doesn't depend on `lanekeeper` being
         // resolvable on PATH.
         exitCode = await sync();
+
+        // Housekeeping, never a reason to fail this landing: sweep sibling
+        // lanes whose OWN branch already made it upstream (nothing created
+        // ever tears a worktree down on the way out) so they don't
+        // accumulate on disk forever waiting for someone to remember.
+        try {
+          const mainTop = resolveMainCheckout(process.cwd());
+          const pruned = pruneLandedLanes(mainTop, cfg, process.cwd());
+          if (pruned.length > 0) {
+            const names = pruned.map((p) => p.split("/").pop()).join(", ");
+            console.log(`${DIM}pruned ${pruned.length} already-landed lane${pruned.length === 1 ? "" : "s"}: ${names}${RESET}`);
+          }
+        } catch {
+          /* best-effort — never block a successful landing over cleanup */
+        }
       }
     }
   } finally {
