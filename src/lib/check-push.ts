@@ -8,9 +8,12 @@
  * LANEKEEPER_LANDING=1 is set — which only `land.ts` sets, right before its
  * own push.
  *
- * Same idea for `protectedBranches`: a push straight to a production branch
- * gets bounced unless LANEKEEPER_ALLOW_PROTECTED_PUSH=1 is set by hand, for
- * the rare deliberate exception.
+ * Same idea for `productionBranch` and `protectedBranches`: a push straight
+ * to either gets bounced unless LANEKEEPER_ALLOW_PROTECTED_PUSH=1 is set by
+ * hand, for the rare deliberate exception. `lanekeeper promote` pushes to
+ * productionBranch with `--no-verify`, which skips this hook entirely (same
+ * as git always does for --no-verify) — this is what stops everyone ELSE
+ * from doing the same thing by accident.
  */
 import type { LaneKeeperConfig } from "./config.js";
 
@@ -39,11 +42,12 @@ export function parseRefUpdates(stdin: string): RefUpdate[] {
 
 export function checkPush(
   refUpdates: RefUpdate[],
-  cfg: Pick<LaneKeeperConfig, "integrationBranch" | "protectedBranches">,
+  cfg: Pick<LaneKeeperConfig, "integrationBranch" | "productionBranch" | "protectedBranches">,
   env: NodeJS.ProcessEnv,
 ): CheckResult {
   const integrationRef = `refs/heads/${cfg.integrationBranch}`;
-  const protectedRefs = new Set(cfg.protectedBranches.map((b) => `refs/heads/${b}`));
+  const protectedBranches = cfg.productionBranch ? [...cfg.protectedBranches, cfg.productionBranch] : cfg.protectedBranches;
+  const protectedRefs = new Set(protectedBranches.map((b) => `refs/heads/${b}`));
 
   for (const { remoteRef } of refUpdates) {
     if (protectedRefs.has(remoteRef) && env.LANEKEEPER_ALLOW_PROTECTED_PUSH !== "1") {

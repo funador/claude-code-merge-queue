@@ -26,10 +26,20 @@ export interface LaneKeeperConfig {
   /** The shared branch `lanekeeper land` rebases onto and pushes to. */
   integrationBranch: string;
   /**
-   * Branches the pre-push hook refuses a *direct* push to, on top of
-   * integrationBranch (which is always protected). Use this for a
-   * production branch your integration branch promotes to separately —
-   * e.g. ["main"] if integrationBranch is "dev".
+   * The production branch, if you run a two-stage model (agents land on
+   * `integrationBranch`; a human promotes that to `productionBranch` on
+   * their own schedule via `lanekeeper promote`). `null` means
+   * `integrationBranch` IS production — no separate promotion step, and
+   * `lanekeeper promote` is a no-op. When set, this branch is automatically
+   * protected by the pre-push hook — you don't need to also list it in
+   * `protectedBranches`.
+   */
+  productionBranch: string | null;
+  /**
+   * Extra branches the pre-push hook refuses a *direct* push to, beyond
+   * integrationBranch (always protected) and productionBranch (protected
+   * automatically when set). Most repos running the standard two-stage
+   * model don't need this at all.
    */
   protectedBranches: string[];
   /**
@@ -61,6 +71,7 @@ export const DEFAULTS: LaneKeeperConfig = {
   worktreeSuffix: "-lane-",
   portBase: 3000,
   integrationBranch: "main",
+  productionBranch: null,
   protectedBranches: [],
   regenerableFiles: [],
   symlinks: [".env", ".env.local", "node_modules"],

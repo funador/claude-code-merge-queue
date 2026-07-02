@@ -19,13 +19,21 @@ export default {
   // each lane also runs its own throwaway dev server.
   portBase: 3000,
 
-  // The branch `lanekeeper land` rebases onto and pushes to.
+  // The branch `lanekeeper land` rebases onto and pushes to. Agents land
+  // here continuously and autonomously — see the CLAUDE.md workflow section
+  // `lanekeeper init` writes.
   integrationBranch: "main",
 
-  // Extra branches the pre-push hook refuses a *direct* push to. Leave empty
-  // if integrationBranch IS your production branch. If you promote a
-  // separate "dev" branch to "main" the way this repo's own history did,
-  // set integrationBranch to "dev" and protectedBranches to ["main"].
+  // Set this if you run a two-stage model: agents land on integrationBranch,
+  // a human ships to productionBranch on their own schedule with
+  // `lanekeeper promote`. null (the default) means integrationBranch IS
+  // production — no separate promotion step. Example: integrationBranch
+  // "dev", productionBranch "main". Automatically protected by the pre-push
+  // hook when set — you don't need to also list it below.
+  productionBranch: null,
+
+  // Extra branches the pre-push hook refuses a *direct* push to, beyond
+  // integrationBranch and productionBranch. Most repos need nothing here.
   protectedBranches: [],
 
   // Files your build tool rewrites on its own that should never block a
