@@ -1,7 +1,7 @@
 {
   "name": "lane-keeper",
   "version": "0.1.0",
-  "description": "Keep parallel coding agents in their lane: one worktree each, one build at a time, one landing at a time, zero races.",
+  "description": "The local, zero-cost merge queue for parallel Claude Code agents. Plugs into Claude Code's native worktree isolation; one build at a time, one landing at a time, zero races.",
   "type": "module",
   "license": "MIT",
   "author": "Jesse Heaslip",
@@ -16,6 +16,7 @@
     "git-worktree",
     "parallel-agents",
     "coding-agent",
+    "merge-queue",
     "monorepo-tooling"
   ],
   "bin": {

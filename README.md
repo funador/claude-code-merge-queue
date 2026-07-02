@@ -11,22 +11,19 @@
 
 # Lane Keeper 🛟
 
-Keep parallel coding agents in their lane.
+**The local, zero-cost merge queue for parallel Claude Code agents.**
 
-Run one Claude Code (or Codex, or Cursor, or whatever) at a time in a repo,
-and everything just works. Run four at once — which is where this is all
-heading, if it isn't already your Tuesday — and you get a very specific,
-very predictable flavor of chaos:
+Claude Code already isolates your agents — `--worktree` (or `isolation:
+"worktree"` on a subagent) gives every session its own git worktree, natively,
+no setup. That part's solved. Lane Keeper is the part that comes after: what
+happens when four isolated agents all try to land, build, and test *at the
+same time*.
 
-- 🥊 Two agents in the same working tree clobber each other's uncommitted
-  edits and fight over the git index.
 - 🏁 Everyone pushes to the same branch, someone loses the race, and the
   rejected push turns into a rebase, which sometimes turns into *another*
   rejected push.
 - 🔥 A full build is heavy. Four of them running at once turn your laptop
   into a space heater.
-- 🪟 Four dev servers means four ports, four caches, and you, tabbing between
-  browser windows trying to remember whose work is whose.
 - 🎲 If your tests hit a shared database, concurrent runs race each other's
   resets. The failures look flaky. They are not flaky. They're just honest.
 
@@ -39,17 +36,29 @@ exactly the wrong moment, and mean nothing by it.
 
 **So don't ask nicely. Make the collision impossible.** 🚦
 
-## 🧰 What's in the box
+## 🆚 vs. GitHub's Merge Queue
 
-Five small, boring, load-bearing pieces:
+GitHub already ships a merge queue. Two things it costs you that this doesn't:
+
+| | GitHub Merge Queue | Lane Keeper |
+|---|---|---|
+| Private repo | **Enterprise Cloud only** | Any plan, any repo |
+| Cost per landing | GitHub Actions minutes, every queue attempt | $0 — runs on your own machine |
+| Requires | A pull request | Nothing — direct rebase + push |
+
+Same idea — serialize landings, test before merge, keep history clean — run
+locally instead of in someone else's billed cloud. 💸
+
+## 🧰 What's in the box
 
 | Command | What it does |
 |---|---|
-| `lanekeeper launch` | Claims the next free lane, creates (or reuses) its git worktree, and starts your agent inside it. |
+| `lanekeeper hook worktree-create` | A Claude Code `WorktreeCreate` hook. Plugs Lane Keeper's numbered lanes into Claude's *native* worktree creation — doesn't reinvent it. |
 | `lanekeeper build-lock -- <cmd>` | Runs `<cmd>` — your build — serialized across every lane, machine-wide. |
 | `lanekeeper land` | Rebases and pushes your lane onto the integration branch through a FIFO queue, so two lanes are never mid-push at once. |
 | `lanekeeper sync` | Fast-forwards your main checkout so a dev server actually sees what just landed. |
 | `lanekeeper preview` | Instantly mirrors a lane's live working tree — uncommitted changes included — onto the main checkout, so you can look at it without a build. |
+| `lanekeeper port` | Prints a lane's dev-server port, derived from its own directory name. |
 
 Plus 🔒 a pre-push hook that makes `land` non-optional: a direct `git push`
 straight to the integration branch gets bounced, full stop. Not a lint
@@ -69,16 +78,15 @@ npm install --save-dev lane-keeper
 npx lanekeeper init
 ```
 
-That writes `lanekeeper.config.mjs` at your repo root. Its presence is what
-turns Lane Keeper on — nothing here touches a repo that hasn't opted in.
-Open it, set `integrationBranch`, and add whatever else applies (see
-Configuration below).
+That writes `lanekeeper.config.mjs` at your repo root and prints the rest of
+these steps. **Commit it** — it needs to exist on the branch a new worktree
+checks out, or the hook below falls back to defaults.
 
-Then:
-
-1. Copy `node_modules/lane-keeper/hooks/pre-push` to `.husky/pre-push` (or
+1. Add the `WorktreeCreate` hook to `.claude/settings.json` — copy
+   [`hooks/claude-settings.example.json`](hooks/claude-settings.example.json).
+2. Copy `node_modules/lane-keeper/hooks/pre-push` to `.husky/pre-push` (or
    append it to one you already have).
-2. Add to `package.json`:
+3. Add to `package.json`:
    ```json
    "scripts": {
      "land": "lanekeeper land",
@@ -87,12 +95,10 @@ Then:
      "preview:restore": "lanekeeper preview --restore"
    }
    ```
-3. Bind `lanekeeper launch` to however you start your agent — a shell
-   function, an alias, whatever your muscle memory already does.
 
-From here on: `lanekeeper launch` from your main checkout to spin up an
-isolated lane, do the work, and `lanekeeper land` when it's green. Repeat
-with as many lanes as your laptop can stand. 🚀
+From here on: `claude --worktree <name>` to spin up an isolated lane —
+Lane Keeper's hook takes it from there — do the work, and `lanekeeper land`
+when it's green. Repeat with as many lanes as your laptop can stand. 🚀
 
 ## ⚙️ Configuration
 
@@ -102,7 +108,6 @@ field with comments. The short version:
 
 ```js
 export default {
-  agentCommand: "claude",              // what you actually run
   branchPrefix: "lane/",               // lane/1, lane/2, ...
   worktreeSuffix: "-lane-",            // ../your-repo-lane-1
   portBase: 3000,                      // lane n gets portBase + n
@@ -114,38 +119,44 @@ export default {
 };
 ```
 
-Nothing here is hardcoded to any framework, branch model, or agent. 🧩 If
-your repo runs a two-stage `dev` → `main` promotion, set
-`integrationBranch: "dev"` and `protectedBranches: ["main"]` and the
-pre-push hook enforces both: lanes land on `dev` through the queue, and
-nothing pushes straight to `main` by accident.
+Nothing here is hardcoded to any framework or branch model. 🧩 If your repo
+runs a two-stage `dev` → `main` promotion, set `integrationBranch: "dev"` and
+`protectedBranches: ["main"]` and the pre-push hook enforces both: lanes
+land on `dev` through the queue, and nothing pushes straight to `main` by
+accident.
 
-## 🔁 The one idea underneath all of it
+## 🔁 The one idea underneath most of it
 
-Every piece here is crash-safe the **same way**, on purpose:
+The build queue, the landing queue, and the ephemeral-resource pattern are
+all crash-safe the **same way**, on purpose:
 
 1. Claim a resource.
 2. Tag the claim with your process ID.
 3. Let liveness — not a timeout — decide when a claim is stale.
 
-`queue-lock.ts` does it for the build and landing queues. `launch.ts` does
-it for a lane. `ephemeral.ts` does it for whatever test resource you wire
-in. `Kill -9` any of them mid-claim, and the next process to come along
-notices the PID is dead and reclaims it.
+`queue-lock.ts` does it for the build and landing queues. `ephemeral.ts`
+does it for whatever test resource you wire in. `Kill -9` any of them
+mid-claim, and the next process to come along notices the PID is dead and
+reclaims it.
 
-No stale locks. No "just restart your laptop." No magic number for how
-long is too long to wait. ✅
+The `WorktreeCreate` hook uses a cousin of the same idea, adapted to the fact
+that it's a one-shot script with no long-lived process to check liveness
+against: the claim IS the worktree, and `git worktree add` failing on an
+already-taken path is the atomicity guard, delegated straight to git instead
+of a PID file.
 
-That's really the whole trick. Not "smarter agents" — dumber collisions.
-**Structurally impossible beats politely requested, every time.**
+Either way: no stale locks, no "just restart your laptop," no magic number
+for how long is too long to wait. ✅ Structurally impossible beats politely
+requested, every time.
 
 ## 🧬 Where this came from
 
 This is the extracted, generalized shape of tooling built to run several
 parallel Claude Code agents on one real production codebase without them
-tripping over each other — worktree isolation, a build queue, a landing
-queue enforced by a git hook, instant previews, and the ephemeral-resource
-pattern for tests. The names have been filed off; the mechanics haven't.
+tripping over each other — a build queue, a landing queue enforced by a git
+hook, instant previews, and the ephemeral-resource pattern for tests, all
+sitting on top of Claude Code's own native worktree isolation. The names
+have been filed off; the mechanics haven't.
 
 ## 📄 License
 
