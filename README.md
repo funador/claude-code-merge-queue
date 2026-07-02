@@ -13,6 +13,10 @@
 
 **The local, zero-cost merge queue for parallel Claude Code agents.**
 
+*Honesty check: this repo — code, tests, docs, all of it — was built with
+Claude Code. The commits aren't co-authored (they should have been), so
+this line does the disclosing instead.*
+
 Claude Code already isolates your agents — `--worktree` (or `isolation:
 "worktree"` on a subagent) gives every session its own git worktree, natively,
 no setup. That part's solved. LaneKeeper is the part that comes after: what
