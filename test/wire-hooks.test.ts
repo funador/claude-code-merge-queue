@@ -94,6 +94,21 @@ test("wireHuskyPrePush appends to an existing custom pre-push without dropping i
   }
 });
 
+test("wireHuskyPrePush's appended block has no duplicate shebang or self-referential 'copy this file' prose", () => {
+  const dir = scratchDir();
+  try {
+    mkdirSync(join(dir, ".husky"));
+    writeFileSync(join(dir, ".husky", "pre-push"), "#!/usr/bin/env sh\necho custom logic\n");
+    wireHuskyPrePush(dir);
+    const content = readFileSync(join(dir, ".husky", "pre-push"), "utf8");
+    const shebangCount = content.split("\n").filter((l) => l.startsWith("#!")).length;
+    assert.equal(shebangCount, 1, "only the file's own original shebang should be present");
+    assert.doesNotMatch(content, /Copy this file to \.husky/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("wireHuskyPrePush is idempotent", () => {
   const dir = scratchDir();
   try {

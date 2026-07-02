@@ -17,8 +17,8 @@
  *     retries. Any other dirty file → warn and skip.
  */
 import { execFileSync } from "node:child_process";
-import { dirname, resolve } from "node:path";
 import { loadConfig } from "./lib/config.js";
+import { resolveMainCheckout } from "./lib/main-checkout.js";
 
 const LOCK_RETRIES = 3;
 
@@ -51,8 +51,7 @@ function sleep(ms: number): void {
 export async function sync(): Promise<number> {
   let MAIN: string;
   try {
-    const common = execFileSync("git", ["rev-parse", "--git-common-dir"], { encoding: "utf8" }).trim();
-    MAIN = dirname(resolve(process.cwd(), common));
+    MAIN = resolveMainCheckout(process.cwd());
   } catch {
     console.error("lanekeeper sync: not inside a git repo — nothing to do.");
     return 0;
@@ -65,6 +64,20 @@ export async function sync(): Promise<number> {
   const branch = branchRes.out.trim();
   if (!branch || branch === "HEAD") {
     console.error("lanekeeper sync: the checkout is detached or unresolved — left untouched.");
+    return 0;
+  }
+  // The main checkout is meant to stay parked on integrationBranch permanently
+  // (that's what makes "fast-forward it" a safe, unattended operation). If
+  // it's on something else — someone switched branches in it by hand, or ran
+  // `land` from a single non-worktree checkout instead of a lane worktree —
+  // fast-forwarding "whatever HEAD happens to be" silently does the wrong
+  // thing. Say so plainly instead of surfacing a raw git error later.
+  if (branch !== cfg.integrationBranch) {
+    console.error(
+      `lanekeeper sync: this checkout is on '${branch}', not the configured integrationBranch ` +
+        `('${cfg.integrationBranch}'). sync only fast-forwards the main checkout — run it from ` +
+        `there, or check out '${cfg.integrationBranch}' here first. Left untouched.`,
+    );
     return 0;
   }
   const upstream = `origin/${branch}`;

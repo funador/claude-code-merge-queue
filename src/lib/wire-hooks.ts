@@ -62,6 +62,24 @@ function shippedPrePushTemplate(): string {
   return readFileSync(join(here, "..", "..", "hooks", "pre-push"), "utf8");
 }
 
+// The template file is written to stand alone (shebang + comments explaining
+// itself to a human reading it fresh). Appending it whole into an *existing*
+// hook file would duplicate the shebang mid-script and leave behind prose
+// like "copy this file to .husky/pre-push" that's nonsensical once it's
+// already there. So strip the shebang and the leading comment block, and
+// append only the functional part — the same source of truth, no second
+// copy to drift out of sync.
+function functionalSnippet(template: string): string {
+  const lines = template.split("\n");
+  let i = 0;
+  if (lines[0]?.startsWith("#!")) i++;
+  for (; i < lines.length; i++) {
+    const trimmed = lines[i]?.trim() ?? "";
+    if (trimmed !== "" && !trimmed.startsWith("#")) break;
+  }
+  return lines.slice(i).join("\n").trimEnd() + "\n";
+}
+
 export function wireHuskyPrePush(root: string): WireResult {
   const huskyDir = join(root, ".husky");
   if (!existsSync(huskyDir)) return "no-husky";
@@ -78,7 +96,8 @@ export function wireHuskyPrePush(root: string): WireResult {
   const existing = readFileSync(path, "utf8");
   if (existing.includes(PRE_PUSH_MARKER)) return "already-wired";
 
-  appendFileSync(path, `\n# --- Lane Keeper (appended by \`lanekeeper init\`) ---\n${template}`);
+  const marker = "# --- Lane Keeper (appended by `lanekeeper init`) — see node_modules/lane-keeper/hooks/pre-push for the full comments ---";
+  appendFileSync(path, `\n${marker}\n${functionalSnippet(template)}`);
   chmodSync(path, 0o755);
   return "merged";
 }
