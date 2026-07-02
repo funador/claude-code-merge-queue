@@ -1,0 +1,44 @@
+{
+  "name": "lane-keeper",
+  "version": "0.1.0",
+  "description": "Keep parallel coding agents in their lane: one worktree each, one build at a time, one landing at a time, zero races.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Heaslip",
+  "homepage": "https://github.com/funador/lane-keeper",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/funador/lane-keeper.git"
+  },
+  "keywords": [
+    "claude-code",
+    "ai-agents",
+    "git-worktree",
+    "parallel-agents",
+    "coding-agent",
+    "monorepo-tooling"
+  ],
+  "bin": {
+    "lanekeeper": "./dist/bin/lanekeeper.js"
+  },
+  "files": [
+    "dist",
+    "hooks",
+    "examples",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && chmod +x dist/bin/lanekeeper.js",
+    "prepare": "npm run build",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,40 @@
+// lanekeeper.config.mjs — lives at your repo root. `lanekeeper init` writes a
+// copy of this for you; edit the values below for your project.
+//
+// Its presence here is also what turns Lane Keeper ON for this repo —
+// `lanekeeper launch` only auto-isolates a repo that has this file.
+
+/** @type {import("lane-keeper").LaneKeeperConfig} */
+export default {
+  // The command your agent launches with.
+  agentCommand: "claude",
+
+  // Lane branches: lane/1, lane/2, ...
+  branchPrefix: "lane/",
+
+  // Sibling worktree dirs: ../<your-repo>-lane-1, -lane-2, ...
+  worktreeSuffix: "-lane-",
+
+  // Lane 1 gets this port, lane 2 gets portBase + 2, and so on — handy if
+  // each lane also runs its own throwaway dev server.
+  portBase: 3000,
+
+  // The branch `lanekeeper land` rebases onto and pushes to.
+  integrationBranch: "main",
+
+  // Extra branches the pre-push hook refuses a *direct* push to. Leave empty
+  // if integrationBranch IS your production branch. If you promote a
+  // separate "dev" branch to "main" the way this repo's own history did,
+  // set integrationBranch to "dev" and protectedBranches to ["main"].
+  protectedBranches: [],
+
+  // Files your build tool rewrites on its own that should never block a
+  // rebase or a fast-forward. Next.js projects typically want
+  // ["next-env.d.ts"] here at minimum — add to this list the first time a
+  // regenerated file blocks a landing, and never think about it again.
+  regenerableFiles: [],
+
+  // Git-ignored paths symlinked into every new lane so it needs no fresh
+  // install and no copy of your secrets.
+  symlinks: [".env", ".env.local", "node_modules"],
+};

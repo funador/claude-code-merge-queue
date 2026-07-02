@@ -1,0 +1,115 @@
+/**
+ * land.ts — the ONLY sanctioned way for a lane to land onto the integration
+ * branch.
+ *
+ * Left to behavioral convention alone ("only one lane rebases-and-pushes at
+ * a time"), several lanes going green around the same time all rebase and
+ * push at once: pushes race, the loser's checks run against an already-stale
+ * remote, and when something breaks everyone ends up mid-push fixing the
+ * same failure. This makes "land" a single cross-worktree FIFO queue
+ * (queue-lock.ts — the same crash-safe mechanics build-lock uses) so only
+ * one lane is ever fetching, rebasing, pushing, and checking at a time.
+ *
+ * A failed attempt releases the lock rather than holding it hostage — the
+ * next lane in line lands next while the failed lane fixes and re-runs
+ * `lanekeeper land` (re-entering the back of the queue). That keeps one
+ * broken lane from blocking every OTHER lane's unrelated, ready-to-land
+ * work, while still guaranteeing no two lanes are ever mid-push at once.
+ *
+ * This is only half the guarantee, though — a convention that says "always
+ * run `lanekeeper land`" is exactly the kind of rule a confused agent (or a
+ * human under time pressure) eventually skips by hand-rolling `git push`.
+ * The other half lives in hooks/pre-push: it hard-rejects a direct push to
+ * the integration branch that didn't set LANEKEEPER_LANDING=1, which this
+ * script sets right before its own push and nothing else legitimately would.
+ * Wire that hook up (see the README) and the queue isn't a convention
+ * anymore — it's the only door.
+ *
+ *   Usage:  lanekeeper land   (run from a lane worktree, on its own branch)
+ */
+import { execSync, spawnSync } from "node:child_process";
+import { createQueueLock } from "./lib/queue-lock.js";
+import { hasConfig, loadConfig } from "./lib/config.js";
+import { sync } from "./sync.js";
+
+const DIM = "\x1b[2m", RESET = "\x1b[0m", RED = "\x1b[31m", GREEN = "\x1b[32m";
+
+export async function land(): Promise<void> {
+  if (!hasConfig()) {
+    console.error("lanekeeper land: no lanekeeper.config found at the repo root. Run `lanekeeper init` first.");
+    process.exit(1);
+  }
+  const cfg = await loadConfig();
+
+  const branch = execSync("git rev-parse --abbrev-ref HEAD", { encoding: "utf8" }).trim();
+  if (branch === cfg.integrationBranch || cfg.protectedBranches.includes(branch) || branch === "HEAD") {
+    console.error(`lanekeeper land: refusing to run from '${branch}' — land is for lane branches only.`);
+    process.exit(1);
+  }
+
+  // A rebase refuses to run at all with a dirty tree. Build-tool-regenerated
+  // noise shouldn't block landing — discard ONLY the configured
+  // regenerableFiles, exactly like sync does for the fast-forward on the
+  // other end. Any other dirty file is real work-in-progress: leave it alone
+  // and let the rebase fail loud.
+  const regenerable = new Set(cfg.regenerableFiles);
+  const status = execSync("git status --porcelain", { encoding: "utf8" });
+  const dirty = status
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => line.slice(3).trim());
+  const blocking = dirty.filter((f) => !regenerable.has(f));
+  if (dirty.length > 0 && blocking.length === 0) {
+    execSync(`git checkout -- ${dirty.map((f) => `"${f}"`).join(" ")}`);
+  }
+
+  const lock = createQueueLock("land");
+  await lock.acquire({
+    label: branch,
+    onWait: ({ ahead, holder }) => {
+      if (ahead > 0) {
+        console.log(`${DIM}[land-queue] ${branch}: waiting — ${ahead} landing${ahead === 1 ? "" : "s"} ahead…${RESET}`);
+      } else if (holder) {
+        console.log(`${DIM}[land-queue] ${branch}: next up — waiting for '${holder.label ?? holder.lane}' to finish landing…${RESET}`);
+      }
+    },
+  });
+
+  let exitCode = 0;
+  try {
+    console.log(`${DIM}[land-queue] ${branch}: lock acquired — landing…${RESET}`);
+
+    console.log(`${DIM}fetching origin/${cfg.integrationBranch}…${RESET}`);
+    execSync(`git fetch origin ${cfg.integrationBranch} --quiet`, { stdio: "inherit" });
+
+    console.log(`${DIM}rebasing onto origin/${cfg.integrationBranch}…${RESET}`);
+    const rebase = spawnSync("git", ["rebase", `origin/${cfg.integrationBranch}`], { stdio: "inherit" });
+    if (rebase.status !== 0) {
+      spawnSync("git", ["rebase", "--abort"], { stdio: "ignore" });
+      console.error(`\n${RED}land: rebase onto origin/${cfg.integrationBranch} conflicted — aborted, working tree left clean.${RESET}`);
+      console.error(`Resolve it yourself (git fetch origin ${cfg.integrationBranch} && git rebase origin/${cfg.integrationBranch}), then re-run 'lanekeeper land'.`);
+      exitCode = 1;
+    } else {
+      console.log(`${DIM}pushing to ${cfg.integrationBranch} (this is where your CI/checks hook runs)…${RESET}`);
+      const push = spawnSync("git", ["push", "origin", `HEAD:${cfg.integrationBranch}`], {
+        stdio: "inherit",
+        env: { ...process.env, LANEKEEPER_LANDING: "1" },
+      });
+      if (push.status !== 0) {
+        console.error(`\n${RED}land: push to ${cfg.integrationBranch} failed — see output above.${RESET}`);
+        console.error(`Fix the failure, then re-run 'lanekeeper land'.`);
+        exitCode = 1;
+      } else {
+        console.log(`${GREEN}✓ ${branch} landed on ${cfg.integrationBranch}.${RESET}`);
+        // Landing isn't "done" until the checkout that actually serves your
+        // dev server can see it — call sync in-process rather than shelling
+        // back out to the CLI, so this doesn't depend on `lanekeeper` being
+        // resolvable on PATH.
+        exitCode = await sync();
+      }
+    }
+  } finally {
+    lock.release();
+  }
+  process.exit(exitCode);
+}
