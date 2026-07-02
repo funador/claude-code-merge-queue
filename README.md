@@ -55,8 +55,9 @@ locally instead of in someone else's billed cloud. 💸
 |---|---|
 | `lanekeeper hook worktree-create` | A Claude Code `WorktreeCreate` hook. Plugs Lane Keeper's numbered lanes into Claude's *native* worktree creation — doesn't reinvent it. |
 | `lanekeeper build-lock -- <cmd>` | Runs `<cmd>` — your build — serialized across every lane, machine-wide. |
-| `lanekeeper land` | Rebases and pushes your lane onto the integration branch through a FIFO queue, so two lanes are never mid-push at once. |
+| `lanekeeper land` | Rebases and pushes your lane onto the integration branch through a FIFO queue, so two lanes are never mid-push at once. Agents run this themselves — see below. |
 | `lanekeeper sync` | Fast-forwards your main checkout so a dev server actually sees what just landed. |
+| `lanekeeper promote` | Ships the integration branch to production. **Human-only** — never in an agent's instructions, never automated. |
 | `lanekeeper preview` | Instantly mirrors a lane's live working tree — uncommitted changes included — onto the main checkout, so you can look at it without a build. |
 | `lanekeeper port` | Prints a lane's dev-server port, derived from its own directory name. |
 
@@ -78,9 +79,18 @@ npm install --save-dev lane-keeper
 npx lanekeeper init
 ```
 
-That writes `lanekeeper.config.mjs` at your repo root and prints the rest of
-these steps. **Commit it** — it needs to exist on the branch a new worktree
-checks out, or the hook below falls back to defaults.
+This writes two files and prints the rest of the steps:
+
+- **`lanekeeper.config.mjs`** — needs to exist on the branch a new worktree
+  checks out, or the hook falls back to defaults.
+- **`CLAUDE.md`** (or appends to yours if you already have one) — this is
+  the part that makes the whole thing hands-off. Claude Code reads it
+  automatically, every session, and it tells the agent to land its own
+  work once green, without being asked. You're not the one running
+  `lanekeeper land` day to day — the agent is. See "The hands-off part"
+  below.
+
+**Commit both.**
 
 1. Add the `WorktreeCreate` hook to `.claude/settings.json` — copy
    [`hooks/claude-settings.example.json`](hooks/claude-settings.example.json).
@@ -91,14 +101,15 @@ checks out, or the hook below falls back to defaults.
    "scripts": {
      "land": "lanekeeper land",
      "sync": "lanekeeper sync",
+     "promote": "lanekeeper promote",
      "preview": "lanekeeper preview",
      "preview:restore": "lanekeeper preview --restore"
    }
    ```
 
-From here on: `claude --worktree <name>` to spin up an isolated lane —
-Lane Keeper's hook takes it from there — do the work, and `lanekeeper land`
-when it's green. Repeat with as many lanes as your laptop can stand. 🚀
+From here on: `claude --worktree <name>` to spin up an isolated lane — Lane
+Keeper's hook takes it from there, and CLAUDE.md tells the agent the rest.
+You show up to run `lanekeeper promote` when you actually want to ship. 🚀
 
 ## ⚙️ Configuration
 
@@ -111,19 +122,38 @@ export default {
   branchPrefix: "lane/",               // lane/1, lane/2, ...
   worktreeSuffix: "-lane-",            // ../your-repo-lane-1
   portBase: 3000,                      // lane n gets portBase + n
-  integrationBranch: "main",           // where `land` pushes
-  protectedBranches: [],               // e.g. ["main"] if integrationBranch is "dev"
+  integrationBranch: "main",           // where agents land — see below
+  productionBranch: null,              // set this for a two-stage model — see below
+  protectedBranches: [],               // extra branches beyond the two above; most repos need none
   regenerableFiles: [],                // files a build tool rewrites — never block a rebase on these
   symlinks: [".env", ".env.local", "node_modules"],
   buildOutputDirs: ["dist", "build", ".next"], // preview never copies these onto your checkout
 };
 ```
 
-Nothing here is hardcoded to any framework or branch model. 🧩 If your repo
-runs a two-stage `dev` → `main` promotion, set `integrationBranch: "dev"` and
-`protectedBranches: ["main"]` and the pre-push hook enforces both: lanes
-land on `dev` through the queue, and nothing pushes straight to `main` by
-accident.
+Nothing here is hardcoded to any framework or branch model. 🧩
+
+## 🙌 The hands-off part
+
+The point isn't "here's a CLI you run." It's that you mostly *don't*:
+
+- **One branch, no promotion.** Leave `productionBranch: null`.
+  `integrationBranch` (say, `main`) is both where agents land and what
+  ships. `lanekeeper promote` is a no-op. You review landed work whenever
+  you like; there's no separate step.
+- **Two-stage: agents land, you promote.** Set `integrationBranch: "dev"`
+  and `productionBranch: "main"`. Agents land on `dev` continuously,
+  autonomously, all day — `lanekeeper land` is pre-authorized in CLAUDE.md,
+  not a decision they check with you first. `main` only moves when *you*
+  run `lanekeeper promote`, on your schedule. The pre-push hook protects
+  `main` either way — no agent, and no accidental `git push`, reaches it
+  except through that one command.
+
+Either model, the engineer's day-to-day loop is: glance at what landed, run
+`lanekeeper promote` when you're ready to ship, move on. Not "remember to
+tell the agent to land," not "review every branch before it merges" — that
+part's already handled by the pre-push hook and the CLAUDE.md section
+`lanekeeper init` wrote for you.
 
 ## 🔁 The one idea underneath most of it
 
