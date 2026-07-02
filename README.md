@@ -64,7 +64,14 @@ locally instead of in someone else's billed cloud. 💸
 Plus 🔒 a pre-push hook that makes `land` non-optional: a direct `git push`
 straight to the integration branch gets bounced, full stop. Not a lint
 warning. Not a Slack reminder. Rejected — with the actual command to run
-instead.
+instead. The same hook also runs your actual checks (`checkCommand` —
+lint/typecheck/test/build) before allowing a landing through at all; a
+config with no checkCommand set **fails every push by default** rather than
+landing unverified code silently.
+
+Every one of those blocks has a real, deliberate way out — see "The
+emergency hatch" below — but it takes two matching, specific pieces of
+intent, not one flag.
 
 And 🧪 a documented extension point (`src/lib/ephemeral.ts` +
 `examples/ephemeral-tmp-dir.example.ts`) for the thing every setup guide
@@ -79,33 +86,36 @@ npm install --save-dev lane-keeper
 npx lanekeeper init
 ```
 
-This writes two files and prints the rest of the steps:
+This does the whole setup, not just the config file:
 
-- **`lanekeeper.config.mjs`** — needs to exist on the branch a new worktree
-  checks out, or the hook falls back to defaults.
-- **`CLAUDE.md`** (or appends to yours if you already have one) — this is
-  the part that makes the whole thing hands-off. Claude Code reads it
-  automatically, every session, and it tells the agent to land its own
-  work once green, without being asked. You're not the one running
-  `lanekeeper land` day to day — the agent is. See "The hands-off part"
-  below.
+- **`lanekeeper.config.mjs`** — `integrationBranch` auto-detected from your
+  current branch, `checkCommand` auto-detected from package.json
+  (`check:push` / `check` / `ci` / `test`, first match wins).
+- **`CLAUDE.md`** (or appends to yours if you already have one) — the part
+  that makes the whole thing hands-off. Claude Code reads it automatically,
+  every session, and it tells the agent to land its own work once green,
+  without being asked. See "The hands-off part" below.
+- **`.claude/settings.json`** — the `WorktreeCreate` hook wired in (created,
+  or merged into your existing settings without touching anything else
+  already there).
+- **`.husky/pre-push`** — created or appended to, *if* you already have
+  Husky. If you don't, `init` tells you so instead of silently writing to
+  the untracked, not-shared-with-your-team `.git/hooks/pre-push`.
 
-**Commit both.**
+**Commit everything it wrote.** Then add to `package.json`:
+```json
+"scripts": {
+  "land": "lanekeeper land",
+  "sync": "lanekeeper sync",
+  "promote": "lanekeeper promote",
+  "preview": "lanekeeper preview",
+  "preview:restore": "lanekeeper preview --restore"
+}
+```
 
-1. Add the `WorktreeCreate` hook to `.claude/settings.json` — copy
-   [`hooks/claude-settings.example.json`](hooks/claude-settings.example.json).
-2. Copy `node_modules/lane-keeper/hooks/pre-push` to `.husky/pre-push` (or
-   append it to one you already have).
-3. Add to `package.json`:
-   ```json
-   "scripts": {
-     "land": "lanekeeper land",
-     "sync": "lanekeeper sync",
-     "promote": "lanekeeper promote",
-     "preview": "lanekeeper preview",
-     "preview:restore": "lanekeeper preview --restore"
-   }
-   ```
+If `init` couldn't detect a `checkCommand` (no matching script in
+package.json), every push is **blocked** until you set one — see 🧰 What's
+in the box above. That's on purpose.
 
 From here on: `claude --worktree <name>` to spin up an isolated lane — Lane
 Keeper's hook takes it from there, and CLAUDE.md tells the agent the rest.
@@ -128,10 +138,40 @@ export default {
   regenerableFiles: [],                // files a build tool rewrites — never block a rebase on these
   symlinks: [".env", ".env.local", "node_modules"],
   buildOutputDirs: ["dist", "build", ".next"], // preview never copies these onto your checkout
+  checkCommand: "npm run check",       // what actually gates a landing — see below
+  checksRequired: true,                // false = deliberately run with none; see below
 };
 ```
 
-Nothing here is hardcoded to any framework or branch model. 🧩
+Nothing here is hardcoded to any framework or branch model. 🧩 A malformed
+config (empty branch names, a negative port, `productionBranch` equal to
+`integrationBranch`, ...) fails loud with every problem listed, the moment
+any command loads it — not a mysterious failure three steps later.
+
+## 🚨 The emergency hatch
+
+Every blocked push — the integration branch, `productionBranch`, anything
+in `protectedBranches` — has a real way through it. It's meant to be used
+rarely and on purpose, so it asks for two separate, specific things instead
+of one flag an agent could set just as easily as a human:
+
+```bash
+LANEKEEPER_EMERGENCY_PUSH=1 git push origin HEAD:main
+```
+
+That alone isn't enough — you'll be prompted, right there in your terminal,
+to **type the exact branch name** to confirm. No terminal attached (CI, a
+script)? Provide the second factor yourself instead:
+
+```bash
+LANEKEEPER_EMERGENCY_PUSH=1 LANEKEEPER_EMERGENCY_PUSH_CONFIRM=main git push origin HEAD:main
+```
+
+No confirmation, no tty, no match — it fails **closed**, not open. This is
+the one place in Lane Keeper that's honestly a convention, not a hard
+guarantee: the env vars stop mistakes and stray pushes, not a truly
+adversarial agent that decides to set them itself. Worth knowing, not worth
+pretending isn't true.
 
 ## 🙌 The hands-off part
 

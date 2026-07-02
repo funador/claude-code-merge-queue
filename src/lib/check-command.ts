@@ -1,0 +1,61 @@
+/**
+ * The part of the merge queue that actually earns the name: running your
+ * lint/typecheck/test/build before a landing is allowed through. Without
+ * this, "merge queue" is just "push queue" — serialized, but blind.
+ */
+import { existsSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { join } from "node:path";
+import type { LaneKeeperConfig } from "./config.js";
+
+// Priority order: prefer a script that already bundles multiple checks
+// (a repo's own "check" or CI script) over a narrower "test" script, but
+// take whatever exists rather than assume one specific name.
+const CANDIDATE_SCRIPTS = ["check:push", "check", "ci", "test"];
+
+/** Look at package.json's own scripts for something to run — best-effort, never throws. */
+export function detectCheckCommand(root: string): string | null {
+  const pkgPath = join(root, "package.json");
+  if (!existsSync(pkgPath)) return null;
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { scripts?: Record<string, string> };
+    const found = CANDIDATE_SCRIPTS.find((name) => pkg.scripts?.[name]);
+    return found ? `npm run ${found}` : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Run the configured check command. Returns the exit code to propagate.
+ *
+ * A null checkCommand is only ever silent if checksRequired was explicitly
+ * turned off — the default is to FAIL the push, because a merge queue that
+ * lets unverified code through by default isn't one, it's a false sense of
+ * safety.
+ */
+export function runCheckCommand(cfg: Pick<LaneKeeperConfig, "checkCommand" | "checksRequired">): number {
+  if (!cfg.checkCommand) {
+    if (cfg.checksRequired) {
+      console.error([
+        "",
+        "✋ No checkCommand configured, and checksRequired is true (the default).",
+        "   This push would land with NOTHING verifying it — no lint, no test, no build.",
+        "   Set checkCommand in lanekeeper.config.mjs, e.g. \"npm run check\".",
+        "   Or, if you really have nothing to check yet, set checksRequired: false —",
+        "   deliberately, so it's a visible, committed choice, not a silent gap.",
+        "",
+      ].join("\n"));
+      return 1;
+    }
+    console.log("lanekeeper check-push: no checkCommand configured (checksRequired: false — running with no checks, on purpose).");
+    return 0;
+  }
+
+  console.log(`lanekeeper check-push: running "${cfg.checkCommand}"…`);
+  const result = spawnSync(cfg.checkCommand, { shell: true, stdio: "inherit" });
+  if (result.status !== 0) {
+    console.error(`\n✋ checkCommand failed (exit ${result.status ?? 1}) — landing blocked.`);
+  }
+  return result.status ?? 1;
+}

@@ -51,4 +51,17 @@ export default {
   // step) — this is the one place your framework's name shows up. Add
   // ".output" for Nuxt, ".svelte-kit" for SvelteKit, etc.
   buildOutputDirs: ["dist", "build", ".next"],
+
+  // The command that actually gates a landing — your lint/typecheck/test/
+  // build. `lanekeeper init` tries to detect this from package.json
+  // (check:push, check, ci, or test, in that order) and fills it in for
+  // you. null means nothing runs, which is only allowed if checksRequired
+  // is also false — see below.
+  checkCommand: "npm run check",
+
+  // true (the default): a null checkCommand FAILS every push rather than
+  // landing unverified code. Set to false yourself to deliberately run
+  // with no checks — a real state for a repo with nothing to test yet, but
+  // one that should be a visible, committed choice, not a silent default.
+  checksRequired: true,
 };

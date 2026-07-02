@@ -1,21 +1,22 @@
 #!/usr/bin/env sh
-# Lane Keeper — landing-queue + protected-branch enforcement.
+# Lane Keeper — landing-queue enforcement + your checks, gating every push.
 #
 # Copy this file to .husky/pre-push (recommended — Husky wires it in on
 # `npm install` for every clone and every lane worktree) or straight to
 # .git/hooks/pre-push (works, but isn't versioned or shared with the team).
 # If you already have a pre-push hook, append this block instead of
-# replacing the file.
+# replacing the file. `lanekeeper init` does all of this for you.
 #
-# This is the enforcement half of `lanekeeper land` — see src/land.ts and
-# src/lib/check-push.ts for why a convention alone isn't enough here.
+# `lanekeeper check-push` does two things, in order:
+#   1. Blocks a direct push to your integration/protected/production
+#      branches that didn't go through `lanekeeper land` / `promote`.
+#   2. Runs `checkCommand` from lanekeeper.config.mjs (your lint/typecheck/
+#      test/build) and fails the push if it fails — or if checkCommand
+#      isn't set and checksRequired wasn't deliberately turned off.
+#
+# See src/land.ts and src/lib/check-push.ts for why a convention alone
+# isn't enough to guarantee either of those.
 
 if ! npx lanekeeper check-push; then
   exit 1
 fi
-
-# ── Your own checks go here ─────────────────────────────────────────────────
-# This is where lint/typecheck/test/build should run, so nothing lands
-# without passing them first. Example:
-#
-#   npm run check || exit 1

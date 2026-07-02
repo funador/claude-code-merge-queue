@@ -64,6 +64,24 @@ export interface LaneKeeperConfig {
    * assuming this tool knows your build tool.
    */
   buildOutputDirs: string[];
+  /**
+   * The command `lanekeeper check-push` runs (in addition to the branch
+   * protections) before a landing is allowed through — your lint/typecheck/
+   * test/build, whatever "green" means for this repo. `null` means nothing
+   * runs. That's a real, dangerous state for a tool whose whole pitch is
+   * "tested before merge," so it's only silent if `checksRequired` is
+   * explicitly set to `false` too — otherwise a null checkCommand FAILS the
+   * push rather than landing something nobody verified.
+   */
+  checkCommand: string | null;
+  /**
+   * When true (the default) and `checkCommand` is null, `check-push` fails
+   * the push instead of landing unverified code. Set to `false` yourself to
+   * deliberately run with no checks — a real repo state (nothing to test
+   * yet), but one that should be a visible, committed, code-reviewable
+   * choice, not a silent default.
+   */
+  checksRequired: boolean;
 }
 
 export const DEFAULTS: LaneKeeperConfig = {
@@ -76,7 +94,53 @@ export const DEFAULTS: LaneKeeperConfig = {
   regenerableFiles: [],
   symlinks: [".env", ".env.local", "node_modules"],
   buildOutputDirs: ["dist", "build", ".next"],
+  checkCommand: null,
+  checksRequired: true,
 };
+
+/**
+ * Fail loud on a malformed config instead of silently misbehaving three
+ * commands later. Returns a list of human-readable problems — empty means
+ * valid.
+ */
+export function validateConfig(cfg: LaneKeeperConfig): string[] {
+  const problems: string[] = [];
+  const nonEmptyString = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0;
+
+  if (!nonEmptyString(cfg.branchPrefix)) problems.push("branchPrefix must be a non-empty string.");
+  if (!nonEmptyString(cfg.worktreeSuffix)) problems.push("worktreeSuffix must be a non-empty string.");
+  if (typeof cfg.portBase !== "number" || !Number.isInteger(cfg.portBase) || cfg.portBase <= 0) {
+    problems.push("portBase must be a positive integer.");
+  }
+  if (!nonEmptyString(cfg.integrationBranch)) problems.push("integrationBranch must be a non-empty string.");
+  if (cfg.productionBranch !== null && !nonEmptyString(cfg.productionBranch)) {
+    problems.push("productionBranch must be null or a non-empty string.");
+  }
+  if (cfg.productionBranch !== null && cfg.productionBranch === cfg.integrationBranch) {
+    problems.push("productionBranch and integrationBranch are the same branch — that's a no-op two-stage model. Set productionBranch to null instead.");
+  }
+  if (!Array.isArray(cfg.protectedBranches) || !cfg.protectedBranches.every(nonEmptyString)) {
+    problems.push("protectedBranches must be an array of non-empty strings.");
+  } else if (cfg.protectedBranches.includes(cfg.integrationBranch)) {
+    problems.push("protectedBranches contains integrationBranch — that branch is where lanekeeper land pushes; it can't also be blocked.");
+  }
+  if (!Array.isArray(cfg.regenerableFiles) || !cfg.regenerableFiles.every((v) => typeof v === "string")) {
+    problems.push("regenerableFiles must be an array of strings.");
+  }
+  if (!Array.isArray(cfg.symlinks) || !cfg.symlinks.every((v) => typeof v === "string")) {
+    problems.push("symlinks must be an array of strings.");
+  }
+  if (!Array.isArray(cfg.buildOutputDirs) || !cfg.buildOutputDirs.every((v) => typeof v === "string")) {
+    problems.push("buildOutputDirs must be an array of strings.");
+  }
+  if (cfg.checkCommand !== null && !nonEmptyString(cfg.checkCommand)) {
+    problems.push("checkCommand must be null or a non-empty string.");
+  }
+  if (typeof cfg.checksRequired !== "boolean") {
+    problems.push("checksRequired must be a boolean.");
+  }
+  return problems;
+}
 
 /**
  * The repo's actual current branch, so `init` doesn't blindly assume "main"
@@ -124,10 +188,19 @@ export function hasConfig(cwd: string = process.cwd()): boolean {
   return configPath(cwd) !== null;
 }
 
-/** Load lanekeeper.config.(m)js from the current repo, merged over DEFAULTS. */
+/**
+ * Load lanekeeper.config.(m)js from the current repo, merged over DEFAULTS.
+ * Throws with every problem listed if the merged config is invalid — a
+ * config that's silently wrong is worse than a command that refuses to run.
+ */
 export async function loadConfig(cwd: string = process.cwd()): Promise<LaneKeeperConfig> {
   const p = configPath(cwd);
   if (!p) return { ...DEFAULTS };
   const mod = (await import(pathToFileURL(p).href)) as { default?: Partial<LaneKeeperConfig> };
-  return { ...DEFAULTS, ...(mod.default ?? {}) };
+  const cfg = { ...DEFAULTS, ...(mod.default ?? {}) };
+  const problems = validateConfig(cfg);
+  if (problems.length > 0) {
+    throw new Error(`Invalid lanekeeper.config at ${p}:\n${problems.map((p2) => `  - ${p2}`).join("\n")}`);
+  }
+  return cfg;
 }

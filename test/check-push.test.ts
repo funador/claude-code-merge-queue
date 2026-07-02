@@ -30,9 +30,41 @@ test("blocks a direct push to an explicit protectedBranches entry", () => {
   assert.equal(result.ok, false);
 });
 
-test("allows a push to a protected branch when LANEKEEPER_ALLOW_PROTECTED_PUSH=1", () => {
-  const result = checkPush(parseRefUpdates(refLine("refs/heads/main")), cfg, { LANEKEEPER_ALLOW_PROTECTED_PUSH: "1" });
+test("blocks a protected-branch push with only LANEKEEPER_EMERGENCY_PUSH set (no confirm)", () => {
+  const result = checkPush(parseRefUpdates(refLine("refs/heads/main")), cfg, { LANEKEEPER_EMERGENCY_PUSH: "1" });
+  assert.equal(result.ok, false);
+});
+
+test("blocks a protected-branch push when the confirm doesn't match the branch", () => {
+  const result = checkPush(parseRefUpdates(refLine("refs/heads/main")), cfg, {
+    LANEKEEPER_EMERGENCY_PUSH: "1",
+    LANEKEEPER_EMERGENCY_PUSH_CONFIRM: "staging",
+  });
+  assert.equal(result.ok, false);
+});
+
+test("allows a push to a protected branch when both emergency env vars are set and match", () => {
+  const result = checkPush(parseRefUpdates(refLine("refs/heads/main")), cfg, {
+    LANEKEEPER_EMERGENCY_PUSH: "1",
+    LANEKEEPER_EMERGENCY_PUSH_CONFIRM: "main",
+  });
   assert.equal(result.ok, true);
+});
+
+test("allows a push to the integration branch when both emergency env vars are set and match", () => {
+  const result = checkPush(parseRefUpdates(refLine("refs/heads/dev")), cfg, {
+    LANEKEEPER_EMERGENCY_PUSH: "1",
+    LANEKEEPER_EMERGENCY_PUSH_CONFIRM: "dev",
+  });
+  assert.equal(result.ok, true);
+});
+
+test("emergency confirm for one branch doesn't leak to a different blocked branch", () => {
+  const result = checkPush(parseRefUpdates(refLine("refs/heads/staging")), cfg, {
+    LANEKEEPER_EMERGENCY_PUSH: "1",
+    LANEKEEPER_EMERGENCY_PUSH_CONFIRM: "main",
+  });
+  assert.equal(result.ok, false);
 });
 
 test("allows a push to an unrelated branch", () => {
