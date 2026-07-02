@@ -147,6 +147,16 @@ test("ensureHooksPath is idempotent once set", () => {
   }
 });
 
+test("ensureHooksPath recognizes Husky v9's .husky/_ convention as already correct, not a custom path", () => {
+  const dir = scratchGitRepo();
+  try {
+    execFileSync("git", ["config", "core.hooksPath", ".husky/_"], { cwd: dir });
+    assert.equal(ensureHooksPath(dir), "already-set");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("ensureHooksPath leaves a deliberate custom hooksPath alone", () => {
   const dir = scratchGitRepo();
   try {

@@ -107,14 +107,24 @@ export type HooksPathResult = "set" | "already-set" | "custom-path";
 
 /**
  * A `.husky/pre-push` file on disk enforces nothing on its own — git only
- * runs it if `core.hooksPath` points at `.husky`, which is normally set as
- * a side effect of the package manager's install step (husky's own
- * `prepare` script). On a freshly cloned repo where nobody's run that
- * install yet — the exact state Quickstart leaves you in right after
- * `init` — the file is silently inert and a direct push sails through
- * uncontested. Since LaneKeeper is the one promising "pushes are gated
- * now," it sets this itself instead of depending on a step that may not
- * have happened yet, mirroring exactly what `husky install` itself does.
+ * runs it if `core.hooksPath` points somewhere that resolves to it, which is
+ * normally set as a side effect of the package manager's install step
+ * (husky's own `prepare` script). On a freshly cloned repo where nobody's
+ * run that install yet — the exact state Quickstart leaves you in right
+ * after `init` — the file is silently inert and a direct push sails through
+ * uncontested. Since LaneKeeper is the one promising "pushes are gated now,"
+ * it sets this itself instead of depending on a step that may not have
+ * happened yet, mirroring exactly what `husky install` itself does.
+ *
+ * Husky v9 changed its own convention mid-flight: v6–v8 point
+ * core.hooksPath directly at `.husky` (hook files run as-is); v9 points it
+ * at `.husky/_`, a generated wrapper directory that then execs the real
+ * `.husky/<hookname>` file. Both are legitimate, already-correct setups —
+ * only treat something OTHER than either as a deliberate custom path worth
+ * warning about. `.husky/_` doesn't exist yet on the fresh-clone/no-install
+ * case this function exists for, so `.husky` remains the right thing to set
+ * when nothing's configured at all; if the project turns out to be v9,
+ * husky's own next real install corrects it to `.husky/_`.
  */
 export function ensureHooksPath(root: string): HooksPathResult {
   let current: string | null;
@@ -124,7 +134,7 @@ export function ensureHooksPath(root: string): HooksPathResult {
     current = null; // unset
   }
 
-  if (current === ".husky") return "already-set";
+  if (current === ".husky" || current === ".husky/_") return "already-set";
   if (current) return "custom-path"; // respect an existing deliberate setup — don't override it
 
   execFileSync("git", ["config", "core.hooksPath", ".husky"], { cwd: root });
