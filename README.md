@@ -175,25 +175,31 @@ pretending isn't true.
 
 ## 🙌 The hands-off part
 
-The point isn't "here's a CLI you run." It's that you mostly *don't*:
+Tests are the reviewer. Not a human, at any point in this pipeline — and
+that's a deliberate, named tradeoff, not an oversight.
 
-- **One branch, no promotion.** Leave `productionBranch: null`.
-  `integrationBranch` (say, `main`) is both where agents land and what
-  ships. `lanekeeper promote` is a no-op. You review landed work whenever
-  you like; there's no separate step.
-- **Two-stage: agents land, you promote.** Set `integrationBranch: "dev"`
-  and `productionBranch: "main"`. Agents land on `dev` continuously,
-  autonomously, all day — `lanekeeper land` is pre-authorized in CLAUDE.md,
-  not a decision they check with you first. `main` only moves when *you*
-  run `lanekeeper promote`, on your schedule. The pre-push hook protects
-  `main` either way — no agent, and no accidental `git push`, reaches it
-  except through that one command.
+- **`checkCommand` gates landing.** Nothing reaches `integrationBranch`
+  without passing it. This is the first, and for most changes the *only*,
+  correctness check anything gets.
+- **`lanekeeper promote` is a release decision, not a code review.**
+  Running it means "this batch of already-landed, already-tested work
+  should ship now" — not "I read the diff and it looks right." If your own
+  CI provider also runs checks against the production branch (most real
+  setups have this — a deploy gate, an E2E suite, whatever), that's a
+  *second automated* checkpoint, still not a human one.
+- **When something gets through anyway, the fix is a test, not a
+  reviewer.** If a bug lands, the answer isn't "a human should have caught
+  that" — it's "what check would have caught it, and why didn't it exist
+  yet." Every miss becomes a permanent guardrail instead of a one-off
+  catch, which is the only version of this that scales past however many
+  diffs one person can actually read.
 
-Either model, the engineer's day-to-day loop is: glance at what landed, run
-`lanekeeper promote` when you're ready to ship, move on. Not "remember to
-tell the agent to land," not "review every branch before it merges" — that
-part's already handled by the pre-push hook and the CLAUDE.md section
-`lanekeeper init` wrote for you.
+This isn't for every team. If what you actually want is a human looking at
+every change before it ships, this tool will feel like it's missing a
+step — because it is, on purpose. It's built for the case where you trust
+the agent's *output conditional on the checks being real*, and the checks
+being non-optional (see 🧰 above) is what makes that trust earned rather
+than assumed.
 
 ## 🔁 The one idea underneath most of it
 
