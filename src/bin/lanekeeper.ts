@@ -55,6 +55,11 @@ export default ${JSON.stringify(generated, null, 2)};
     console.log(`lanekeeper init: wrote ${join(root, "lanekeeper.config.mjs")}`);
     if (detectedBranch && detectedBranch !== DEFAULTS.integrationBranch) {
       console.log(`  (detected current branch "${detectedBranch}" — set as integrationBranch instead of the "${DEFAULTS.integrationBranch}" default)`);
+    } else if (!detectedBranch) {
+      console.log("");
+      console.log(`  ⚠️  Couldn't detect the current branch (detached HEAD?) — integrationBranch`);
+      console.log(`      defaulted to "${DEFAULTS.integrationBranch}". Verify that's actually right`);
+      console.log(`      in lanekeeper.config.mjs before committing it.`);
     }
     if (detectedCheck) {
       console.log(`  (detected "${detectedCheck}" from package.json — set as checkCommand)`);
