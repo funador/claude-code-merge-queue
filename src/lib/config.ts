@@ -6,10 +6,10 @@
  * anyone can point at theirs."
  *
  * `lanekeeper init` writes a starter config into the repo you run it from.
- * Its presence at the repo root is also the opt-in signal `launch` looks
- * for — no config file, no auto-isolation. A tool that silently changes
- * behavior in every git repo you happen to `cd` into is a worse tool than
- * one that requires you to ask for it once.
+ * Worktree isolation itself is Claude Code's job now (native `--worktree` /
+ * `isolation: worktree`) — this config is read by the WorktreeCreate hook
+ * that plugs Lane Keeper's lane numbering into that, and by everything
+ * downstream of it (the build queue, the landing queue, preview).
  */
 import { existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -17,8 +17,6 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export interface LaneKeeperConfig {
-  /** The command your agent launches with: "claude", "codex", "cursor-agent", ... */
-  agentCommand: string;
   /** Lane branches are named "<branchPrefix><n>" — lane/1, lane/2, ... */
   branchPrefix: string;
   /** Sibling worktree dirs are named "<repo><worktreeSuffix><n>" — ../myapp-lane-1. */
@@ -59,7 +57,6 @@ export interface LaneKeeperConfig {
 }
 
 export const DEFAULTS: LaneKeeperConfig = {
-  agentCommand: "claude",
   branchPrefix: "lane/",
   worktreeSuffix: "-lane-",
   portBase: 3000,

@@ -1,14 +1,14 @@
 // lanekeeper.config.mjs — lives at your repo root. `lanekeeper init` writes a
 // copy of this for you; edit the values below for your project.
 //
-// Its presence here is also what turns Lane Keeper ON for this repo —
-// `lanekeeper launch` only auto-isolates a repo that has this file.
+// Worktree isolation is Claude Code's job (native `--worktree` /
+// `isolation: "worktree"`) — this file is what the WorktreeCreate hook
+// (see hooks/claude-settings.example.json) reads to name and shape the lane
+// it creates, and what everything downstream (build queue, landing queue,
+// preview) reads too.
 
 /** @type {import("lane-keeper").LaneKeeperConfig} */
 export default {
-  // The command your agent launches with.
-  agentCommand: "claude",
-
   // Lane branches: lane/1, lane/2, ...
   branchPrefix: "lane/",
 

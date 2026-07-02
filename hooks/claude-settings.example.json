@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "WorktreeCreate": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx lanekeeper hook worktree-create"
+          }
+        ]
+      }
+    ]
+  }
+}

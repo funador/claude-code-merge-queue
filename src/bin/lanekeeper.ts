@@ -2,16 +2,17 @@
 /**
  * The lanekeeper CLI. Every subcommand reads lanekeeper.config from the
  * current repo — see src/lib/config.ts — so none of this is hardcoded to
- * any one project's branch names or agent command.
+ * any one project's branch names.
  */
 import { readFileSync } from "node:fs";
-import { launch } from "../launch.js";
 import { land } from "../land.js";
 import { sync } from "../sync.js";
 import { runPreview } from "../preview.js";
 import { buildLock } from "../build-lock.js";
 import { findRepoRoot, hasConfig, loadConfig, DEFAULTS } from "../lib/config.js";
 import { checkPush, parseRefUpdates } from "../lib/check-push.js";
+import { runWorktreeCreateHook } from "../hooks/worktree-create.js";
+import { lanePort } from "../lib/lane-port.js";
 
 const [, , command, ...rest] = process.argv;
 
@@ -44,18 +45,40 @@ export default ${JSON.stringify(DEFAULTS, null, 2)};
   console.log("");
   console.log("Next steps:");
   console.log("  1. Edit lanekeeper.config.mjs — at minimum, set integrationBranch.");
-  console.log("  2. Wire up the pre-push hook: copy node_modules/lane-keeper/hooks/pre-push");
+  console.log("  2. Wire the WorktreeCreate hook into .claude/settings.json — see");
+  console.log("     node_modules/lane-keeper/hooks/claude-settings.example.json.");
+  console.log("  3. Wire up the pre-push hook: copy node_modules/lane-keeper/hooks/pre-push");
   console.log("     to .husky/pre-push (or append it to an existing one).");
-  console.log('  3. Add to package.json "scripts": land, sync, preview -> "lanekeeper <name>".');
-  console.log("  4. Bind `lanekeeper launch` to whatever shortcut you use to start your agent.");
+  console.log('  4. Add to package.json "scripts": land, sync, preview -> "lanekeeper <name>".');
+  console.log("  5. claude --worktree <name> — Lane Keeper's hook takes it from there.");
 }
 
 async function main(): Promise<void> {
   switch (command) {
     case "init":
       return init();
-    case "launch":
-      return launch(rest);
+    case "hook": {
+      const sub = rest[0];
+      if (sub === "worktree-create") return runWorktreeCreateHook();
+      console.error(`lanekeeper hook: unknown hook "${sub ?? ""}". Only "worktree-create" is supported.`);
+      process.exit(1);
+      return;
+    }
+    case "port": {
+      const root = findRepoRoot();
+      if (!root || !hasConfig(root)) {
+        console.error("lanekeeper port: no lanekeeper.config found — not a lane.");
+        process.exit(1);
+      }
+      const cfg = await loadConfig(root);
+      const port = lanePort(process.cwd(), cfg);
+      if (port === null) {
+        console.error("lanekeeper port: current directory doesn't look like a lane worktree.");
+        process.exit(1);
+      }
+      console.log(port);
+      return;
+    }
     case "land":
       return land();
     case "sync":
@@ -97,11 +120,12 @@ async function main(): Promise<void> {
 
 Usage:
   lanekeeper init                  write a starter lanekeeper.config.mjs
-  lanekeeper launch [-- agent-args] claim a lane, create its worktree, launch your agent
   lanekeeper land                  rebase + push this lane onto the integration branch (queued)
   lanekeeper sync                  fast-forward the MAIN checkout to its upstream
   lanekeeper preview [--restore]   swap the MAIN checkout to this lane's working tree, or restore it
   lanekeeper build-lock -- <cmd>   run <cmd>, serialized across every lane
+  lanekeeper port                  print this lane's dev-server port
+  lanekeeper hook worktree-create  (Claude Code WorktreeCreate hook — not for direct use)
   lanekeeper check-push            (used by the pre-push hook — not for direct use)
 `);
       process.exit(command ? 1 : 0);
