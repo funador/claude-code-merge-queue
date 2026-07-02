@@ -8,6 +8,12 @@
  * exactly what's being iterated on) straight onto the MAIN checkout. The
  * bundler picks up the change and hot-reloads in seconds.
  *
+ * This is framework-agnostic by construction: it's an rsync, not a build
+ * step, so it has no opinion about Next.js, Vite, or anything else — your
+ * own dev server does the actual watching and reloading. The one place a
+ * framework's fingerprints show up is `buildOutputDirs` in your config
+ * (never copy someone's stale ".next" or "dist" over a live checkout).
+ *
  *   lanekeeper preview            from a lane worktree — swap the dev server
  *                                 to show THIS lane's current working tree.
  *   lanekeeper preview --restore  from anywhere — put the dev server back on
@@ -34,10 +40,13 @@ import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveMainCheckout } from "./lib/main-checkout.js";
+import { loadConfig } from "./lib/config.js";
 
 const DIM = "\x1b[2m", RESET = "\x1b[0m", RED = "\x1b[31m", GREEN = "\x1b[32m";
 
-const EXCLUDES = [".git", "node_modules", "dist", "build", ".next", ".env", ".env.local"];
+// Always excluded, regardless of framework — never rsync git internals,
+// dependencies, or secrets over a live checkout.
+const BASE_EXCLUDES = [".git", "node_modules", ".env", ".env.local"];
 
 interface Manifest {
   branch: string;
@@ -64,7 +73,7 @@ function restore(target: string, manifestPath: string): void {
   console.log(`${GREEN}✓ dev server restored to HEAD @ ${head}.${RESET}`);
 }
 
-function preview(source: string, target: string, manifestPath: string): void {
+function preview(source: string, target: string, manifestPath: string, excludes: string[]): void {
   if (source === target) {
     console.error("lanekeeper preview: refusing to run from the dev-server checkout itself — run this from a lane worktree.");
     process.exit(1);
@@ -82,7 +91,7 @@ function preview(source: string, target: string, manifestPath: string): void {
 
   const branch = execFileSync("git", ["-C", source, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
   console.log(`${DIM}copying ${branch}'s working tree onto the dev server…${RESET}`);
-  const rsyncArgs = ["-a", ...EXCLUDES.flatMap((e) => ["--exclude", e]), `${source}/`, `${target}/`];
+  const rsyncArgs = ["-a", ...excludes.flatMap((e) => ["--exclude", e]), `${source}/`, `${target}/`];
   const rsync = spawnSync("rsync", rsyncArgs, { stdio: "inherit" });
   if (rsync.status !== 0) {
     console.error(`${RED}preview: rsync failed.${RESET}`);
@@ -100,7 +109,7 @@ function preview(source: string, target: string, manifestPath: string): void {
   console.log(`${DIM}Run 'lanekeeper preview --restore' when done.${RESET}`);
 }
 
-export function runPreview(args: string[]): void {
+export async function runPreview(args: string[]): Promise<void> {
   const source = process.cwd();
   const target = resolveMainCheckout(source);
   const manifestPath = join(tmpdir(), `lanekeeper-preview-manifest-${createHash("sha1").update(target).digest("hex").slice(0, 12)}.json`);
@@ -117,6 +126,8 @@ export function runPreview(args: string[]): void {
   if (args.includes("--restore")) {
     restore(target, manifestPath);
   } else {
-    preview(source, target, manifestPath);
+    const cfg = await loadConfig(source);
+    const excludes = [...BASE_EXCLUDES, ...cfg.buildOutputDirs];
+    preview(source, target, manifestPath, excludes);
   }
 }

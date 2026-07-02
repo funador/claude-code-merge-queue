@@ -37,4 +37,10 @@ export default {
   // Git-ignored paths symlinked into every new lane so it needs no fresh
   // install and no copy of your secrets.
   symlinks: [".env", ".env.local", "node_modules"],
+
+  // Build-output dirs `lanekeeper preview` never copies onto your dev
+  // checkout. preview is framework-agnostic (it's an rsync, not a build
+  // step) — this is the one place your framework's name shows up. Add
+  // ".output" for Nuxt, ".svelte-kit" for SvelteKit, etc.
+  buildOutputDirs: ["dist", "build", ".next"],
 };

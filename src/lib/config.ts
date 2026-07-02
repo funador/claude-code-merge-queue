@@ -46,6 +46,16 @@ export interface LaneKeeperConfig {
    * so it never needs a fresh install or a copy of your secrets.
    */
   symlinks: string[];
+  /**
+   * Build-output directories `preview` never copies onto the main checkout,
+   * on top of the fixed, always-excluded set (.git, node_modules, .env,
+   * .env.local). `preview` itself doesn't know or care what framework
+   * you're running — it just rsyncs source files onto a checkout your dev
+   * server is watching. The default list covers the common cases; add your
+   * own (".output" for Nuxt, ".svelte-kit" for SvelteKit, ...) rather than
+   * assuming this tool knows your build tool.
+   */
+  buildOutputDirs: string[];
 }
 
 export const DEFAULTS: LaneKeeperConfig = {
@@ -57,6 +67,7 @@ export const DEFAULTS: LaneKeeperConfig = {
   protectedBranches: [],
   regenerableFiles: [],
   symlinks: [".env", ".env.local", "node_modules"],
+  buildOutputDirs: ["dist", "build", ".next"],
 };
 
 export function findRepoRoot(cwd: string = process.cwd()): string | null {
