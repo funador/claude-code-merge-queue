@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { detectCheckCommand, runCheckCommand } from "../src/lib/check-command.js";
+import { detectCheckCommand, detectPackageManager, runCheckCommand } from "../src/lib/check-command.js";
 
 test("detectCheckCommand finds nothing without a package.json", () => {
   const dir = mkdtempSync(join(tmpdir(), "lanekeeper-detect-"));
@@ -29,6 +29,43 @@ test("detectCheckCommand falls back to test when nothing else is present", () =>
   try {
     writeFileSync(join(dir, "package.json"), JSON.stringify({ scripts: { test: "mocha" } }));
     assert.equal(detectCheckCommand(dir), "npm run test");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("detectPackageManager defaults to npm with no lockfile", () => {
+  const dir = mkdtempSync(join(tmpdir(), "lanekeeper-pm-"));
+  try {
+    assert.equal(detectPackageManager(dir), "npm");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("detectPackageManager reads pnpm-lock.yaml, yarn.lock, and bun.lock", () => {
+  const cases: Array<[string, "pnpm" | "yarn" | "bun"]> = [
+    ["pnpm-lock.yaml", "pnpm"],
+    ["yarn.lock", "yarn"],
+    ["bun.lock", "bun"],
+  ];
+  for (const [lockfile, expected] of cases) {
+    const dir = mkdtempSync(join(tmpdir(), "lanekeeper-pm-"));
+    try {
+      writeFileSync(join(dir, lockfile), "");
+      assert.equal(detectPackageManager(dir), expected);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+});
+
+test("detectCheckCommand uses the project's actual package manager, not a hardcoded npm", () => {
+  const dir = mkdtempSync(join(tmpdir(), "lanekeeper-detect-"));
+  try {
+    writeFileSync(join(dir, "pnpm-lock.yaml"), "");
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ scripts: { check: "turbo run lint" } }));
+    assert.equal(detectCheckCommand(dir), "pnpm run check");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

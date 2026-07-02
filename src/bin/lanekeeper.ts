@@ -129,7 +129,7 @@ export default ${JSON.stringify(generated, null, 2)};
     // through uncontested with no indication anything's wrong.
     switch (ensureHooksPath(root)) {
       case "set":
-        console.log("lanekeeper init: set core.hooksPath=.husky so the pre-push hook actually runs (normally set by `npm install`, which may not have run yet).");
+        console.log("lanekeeper init: set core.hooksPath=.husky so the pre-push hook actually runs (normally set by your package manager's install step, which may not have run yet).");
         break;
       case "already-set":
         break; // the common case once installed — nothing to say

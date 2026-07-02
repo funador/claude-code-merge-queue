@@ -82,7 +82,7 @@ crashed run's copy needs to clean itself up without anyone noticing it died.
 ## ⚡ Quickstart
 
 ```bash
-npm install --save-dev lane-keeper
+npm install --save-dev lane-keeper   # or: pnpm add -D / yarn add -D / bun add -d
 npx lanekeeper init
 ```
 
@@ -254,8 +254,11 @@ Things a sharp reader should already know before they ask:
   machine-wide. A 3–4 minute suite caps you well under 20 landings/hour
   flat-out, before any queue wait.
 - **Rebase conflicts abort, they never guess.** `git rebase --abort` on any
-  conflict — `land` tells you to resolve it yourself. It never auto-resolves
-  or silently picks a side.
+  conflict, working tree left clean — it never auto-resolves or silently
+  picks a side. In the normal flow that "you" is the agent, not a human:
+  CLAUDE.md tells it to resolve the conflict itself and re-run `land`, the
+  same way it'd fix any other bug — `checkCommand` still gates the result
+  either way, so a bad resolution gets caught there.
 
 ## 🧬 Where this came from
 

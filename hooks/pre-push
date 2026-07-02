@@ -2,7 +2,8 @@
 # Lane Keeper — landing-queue enforcement + your checks, gating every push.
 #
 # Copy this file to .husky/pre-push (recommended — Husky wires it in on
-# `npm install` for every clone and every lane worktree) or straight to
+# your package manager's install step, for every clone and every lane
+# worktree) or straight to
 # .git/hooks/pre-push (works, but isn't versioned or shared with the team).
 # If you already have a pre-push hook, append this block instead of
 # replacing the file. `lanekeeper init` does all of this for you.
