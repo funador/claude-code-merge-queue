@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="Lane Keeper — keep parallel coding agents in their lane" width="100%" />
+  <img src="assets/banner.svg" alt="Lane Keeper — the local, zero-cost merge queue for parallel Claude Code agents" width="100%" />
 </p>
 
 <p align="center">

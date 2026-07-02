@@ -1,4 +1,4 @@
-<svg width="1200" height="340" viewBox="0 0 1200 340" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Lane Keeper — keep parallel coding agents in their lane">
+<svg width="1200" height="340" viewBox="0 0 1200 340" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Lane Keeper — the local, zero-cost merge queue for parallel Claude Code agents">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#0b1120"/>
@@ -10,7 +10,7 @@
   <rect x="1" y="1" width="1198" height="338" rx="17" fill="none" stroke="#1e293b" stroke-width="2"/>
 
   <text x="600" y="54" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="40" font-weight="700" fill="#f8fafc">🛟 LANE KEEPER</text>
-  <text x="600" y="82" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" fill="#94a3b8">keep parallel coding agents in their lane — one worktree each, zero races</text>
+  <text x="600" y="82" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" fill="#94a3b8">the local, zero-cost merge queue for parallel Claude Code agents</text>
 
   <!-- Lane 1 -->
   <text x="24" y="133" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" fill="#64748b">lane/1</text>
