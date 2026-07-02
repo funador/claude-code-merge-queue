@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -109,3 +109,49 @@ test("concurrent WorktreeCreate hook invocations never collide on the same lane"
     cleanupRepoAndLanes(mainTop);
   }
 });
+
+test("the hook resolves the main checkout correctly when invoked from INSIDE an already-created lane worktree, not just from mainTop itself", async () => {
+  // `git rev-parse --git-common-dir` returns the relative string ".git" from
+  // the main checkout, but an ABSOLUTE path when run from a linked worktree.
+  // A previous, separate path-join implementation only handled the relative
+  // case correctly; from inside a real linked worktree it produced a
+  // nonsense path, which meant createLane's lane-claim loop found no
+  // existing lane ever "in the way" and no `git worktree add` ever
+  // succeeding either — an unbounded loop that burned CPU indefinitely
+  // instead of failing. This reproduces exactly that invocation shape.
+  const mainTop = makeScratchRepo();
+  try {
+    const first = createLane(mainTop, DEFAULTS);
+
+    const child = spawn("node", ["--import", "tsx", WORKER], { stdio: ["pipe", "pipe", "inherit"] });
+    child.stdin.end(JSON.stringify({ cwd: first.wt })); // cwd is INSIDE the lane, not mainTop
+
+    const result = await Promise.race([
+      new Promise<{ code: number; stdout: string }>((resolve) => {
+        let stdout = "";
+        child.stdout.on("data", (d) => (stdout += d));
+        child.on("exit", (code) => resolve({ code: code ?? 1, stdout: stdout.trim() }));
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => {
+          child.kill("SIGKILL");
+          reject(new Error("hook did not exit within 10s — likely regressed into the unbounded lane-claim loop"));
+        }, 10_000),
+      ),
+    ]);
+
+    assert.equal(result.code, 0, "hook should exit 0");
+    assert.equal(result.stdout, expectedLanePath(mainTop, 2), "should claim lane 2, resolved back to the true mainTop");
+    assert.ok(existsSync(result.stdout));
+  } finally {
+    cleanupRepoAndLanes(mainTop);
+  }
+});
+
+function expectedLanePath(mainTop: string, lane: number): string {
+  // git worktree list (and the resolveMainCheckout this hook now shares)
+  // reports fully realpath-resolved paths — macOS's /var -> /private/var in
+  // particular — so compare against that, not the raw mkdtempSync path.
+  const real = realpathSync(mainTop);
+  return join(dirname(real), `${basename(real)}${DEFAULTS.worktreeSuffix}${lane}`);
+}

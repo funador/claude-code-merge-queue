@@ -27,10 +27,24 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, symlinkSync } from "node:fs";
 import { dirname, join, basename } from "node:path";
 import { loadConfig, hasConfig, DEFAULTS, type LaneKeeperConfig } from "../lib/config.js";
+import { resolveMainCheckout } from "../lib/main-checkout.js";
 
 interface HookInput {
   cwd?: string;
 }
+
+// A lane-claim loop with no upper bound is exactly one path-resolution bug
+// away from spinning the CPU forever instead of failing loud — which is
+// precisely what happened here: an earlier, separate implementation of what
+// is now resolveMainCheckout used path.join instead of path.resolve, so
+// invoking this hook from INSIDE an already-created linked worktree (where
+// git reports an ABSOLUTE git-common-dir, not the relative ".git" a fresh
+// checkout reports) produced a nonsense path that never matched an existing
+// lane and never let `git worktree add` succeed either — an infinite loop,
+// confirmed burning 80%+ CPU indefinitely in production use. Fixing the path
+// bug alone doesn't rule out some other future bug in this class; capping
+// the loop means any of them fails loud instead of hanging.
+const MAX_LANE_ATTEMPTS = 1000;
 
 // Trying a lane number that turns out to already be claimed (the expected,
 // routine race with another concurrent hook invocation) is not an error
@@ -51,14 +65,6 @@ function tryGit(args: string[], cwd: string): { ok: boolean; out: string } {
   }
 }
 
-export function resolveMainTop(fromCwd: string): string {
-  const common = execFileSync("git", ["rev-parse", "--git-common-dir"], {
-    cwd: fromCwd,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  }).trim();
-  return dirname(join(fromCwd, common));
-}
 
 /**
  * Claim the lowest free lane, create its worktree, and symlink the
@@ -77,6 +83,9 @@ export function createLane(mainTop: string, cfg: LaneKeeperConfig): { wt: string
   let lane = 0;
   for (;;) {
     lane += 1;
+    if (lane > MAX_LANE_ATTEMPTS) {
+      throw new Error(`could not claim a lane after ${MAX_LANE_ATTEMPTS} attempts — is mainTop ('${mainTop}') actually the repo root?`);
+    }
     const wt = join(dirname(mainTop), `${repoName}${cfg.worktreeSuffix}${lane}`);
     if (existsSync(wt)) continue; // still claimed — try the next lane
 
@@ -138,7 +147,7 @@ export async function runWorktreeCreateHook(): Promise<void> {
   const fromCwd = input.cwd ?? process.cwd();
 
   try {
-    const mainTop = resolveMainTop(fromCwd);
+    const mainTop = resolveMainCheckout(fromCwd);
     const cfg = hasConfig(mainTop) ? await loadConfig(mainTop) : { ...DEFAULTS };
     const { wt } = createLane(mainTop, cfg);
     process.stdout.write(wt + "\n");
