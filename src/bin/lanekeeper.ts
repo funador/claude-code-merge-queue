@@ -199,6 +199,19 @@ async function main(): Promise<void> {
       const stdin = await readStdin();
       const refUpdates = parseRefUpdates(stdin);
 
+      // git still invokes pre-push (with empty stdin) for a push that
+      // updates zero refs — e.g. re-pushing a branch that's already exactly
+      // up to date on the remote. There's nothing to block (nothing is
+      // actually changing on the remote either way) and nothing meaningful
+      // for checkCommand to verify — running it anyway just produces a
+      // confusing, unrelated failure (a missing devDependency, say) that
+      // looks exactly like a real block but isn't one. Recognize "nothing
+      // to push" explicitly instead of silently falling through both checks.
+      if (refUpdates.length === 0) {
+        console.log("lanekeeper check-push: nothing being pushed (already up to date) — skipping checks.");
+        process.exit(0);
+      }
+
       // LANEKEEPER_EMERGENCY_PUSH=1 alone isn't enough — that's one flag an
       // agent (or a fat-fingered alias) could set as easily as a human. The
       // second factor is naming the exact branch, either non-interactively
