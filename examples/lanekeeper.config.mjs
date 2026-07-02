@@ -7,7 +7,7 @@
 // it creates, and what everything downstream (build queue, landing queue,
 // preview) reads too.
 
-/** @type {import("lane-keeper").LaneKeeperConfig} */
+/** @type {import("lanekeeper").LaneKeeperConfig} */
 export default {
   // Lane branches: lane/1, lane/2, ...
   branchPrefix: "lane/",

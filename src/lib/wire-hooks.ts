@@ -97,7 +97,7 @@ export function wireHuskyPrePush(root: string): WireResult {
   const existing = readFileSync(path, "utf8");
   if (existing.includes(PRE_PUSH_MARKER)) return "already-wired";
 
-  const marker = "# --- Lane Keeper (appended by `lanekeeper init`) — see node_modules/lane-keeper/hooks/pre-push for the full comments ---";
+  const marker = "# --- LaneKeeper (appended by `lanekeeper init`) — see node_modules/lanekeeper/hooks/pre-push for the full comments ---";
   appendFileSync(path, `\n${marker}\n${functionalSnippet(template)}`);
   chmodSync(path, 0o755);
   return "merged";
@@ -112,7 +112,7 @@ export type HooksPathResult = "set" | "already-set" | "custom-path";
  * `prepare` script). On a freshly cloned repo where nobody's run that
  * install yet — the exact state Quickstart leaves you in right after
  * `init` — the file is silently inert and a direct push sails through
- * uncontested. Since Lane Keeper is the one promising "pushes are gated
+ * uncontested. Since LaneKeeper is the one promising "pushes are gated
  * now," it sets this itself instead of depending on a step that may not
  * have happened yet, mirroring exactly what `husky install` itself does.
  */

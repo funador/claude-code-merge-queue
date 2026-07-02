@@ -2,7 +2,7 @@
  * promote.ts — ship the integration branch to production by fast-forwarding
  * origin/<productionBranch> to origin/<integrationBranch>.
  *
- * This is the one command in Lane Keeper that's deliberately NOT part of the
+ * This is the one command in LaneKeeper that's deliberately NOT part of the
  * automated workflow. Agents land on `integrationBranch` continuously and
  * autonomously (see the CLAUDE.md workflow section `lanekeeper init` writes) —
  * production only moves when a human decides to run this. If your

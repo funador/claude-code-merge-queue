@@ -1,14 +1,14 @@
 {
-  "name": "lane-keeper",
+  "name": "lanekeeper",
   "version": "0.1.0",
   "description": "The local, zero-cost merge queue for parallel Claude Code agents. Plugs into Claude Code's native worktree isolation; one build at a time, one landing at a time, zero races.",
   "type": "module",
   "license": "MIT",
   "author": "Jesse Heaslip",
-  "homepage": "https://github.com/funador/lane-keeper",
+  "homepage": "https://github.com/funador/lanekeeper",
   "repository": {
     "type": "git",
-    "url": "https://github.com/funador/lane-keeper.git"
+    "url": "https://github.com/funador/lanekeeper.git"
   },
   "keywords": [
     "claude-code",

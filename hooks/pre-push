@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Lane Keeper — landing-queue enforcement + your checks, gating every push.
+# LaneKeeper — landing-queue enforcement + your checks, gating every push.
 #
 # Copy this file to .husky/pre-push (recommended — Husky wires it in on
 # your package manager's install step, for every clone and every lane

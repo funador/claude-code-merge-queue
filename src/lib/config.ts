@@ -8,7 +8,7 @@
  * `lanekeeper init` writes a starter config into the repo you run it from.
  * Worktree isolation itself is Claude Code's job now (native `--worktree` /
  * `isolation: worktree`) — this config is read by the WorktreeCreate hook
- * that plugs Lane Keeper's lane numbering into that, and by everything
+ * that plugs LaneKeeper's lane numbering into that, and by everything
  * downstream of it (the build queue, the landing queue, preview).
  */
 import { existsSync } from "node:fs";

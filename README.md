@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="Lane Keeper — the local, zero-cost merge queue for parallel Claude Code agents" width="100%" />
+  <img src="assets/banner.svg" alt="LaneKeeper — the local, zero-cost merge queue for parallel Claude Code agents" width="100%" />
 </p>
 
 <p align="center">
@@ -9,13 +9,13 @@
   <img alt="Runtime deps" src="https://img.shields.io/badge/runtime%20deps-0-brightgreen.svg">
 </p>
 
-# Lane Keeper 🛟
+# LaneKeeper 🛟
 
 **The local, zero-cost merge queue for parallel Claude Code agents.**
 
 Claude Code already isolates your agents — `--worktree` (or `isolation:
 "worktree"` on a subagent) gives every session its own git worktree, natively,
-no setup. That part's solved. Lane Keeper is the part that comes after: what
+no setup. That part's solved. LaneKeeper is the part that comes after: what
 happens when four isolated agents all try to land, build, and test *at the
 same time*.
 
@@ -40,7 +40,7 @@ exactly the wrong moment, and mean nothing by it.
 
 GitHub already ships a merge queue. Two things it costs you that this doesn't:
 
-| | GitHub Merge Queue | Lane Keeper |
+| | GitHub Merge Queue | LaneKeeper |
 |---|---|---|
 | Private repo | **Enterprise Cloud only** | Any plan, any repo |
 | Cost per landing | GitHub Actions minutes, every queue attempt | $0 — runs on your own machine |
@@ -53,7 +53,7 @@ locally instead of in someone else's billed cloud. 💸
 
 | Command | What it does |
 |---|---|
-| `lanekeeper hook worktree-create` | A Claude Code `WorktreeCreate` hook. Plugs Lane Keeper's numbered lanes into Claude's *native* worktree creation — doesn't reinvent it. |
+| `lanekeeper hook worktree-create` | A Claude Code `WorktreeCreate` hook. Plugs LaneKeeper's numbered lanes into Claude's *native* worktree creation — doesn't reinvent it. |
 | `lanekeeper build-lock -- <cmd>` | Runs `<cmd>` — your build — serialized across every lane, machine-wide. |
 | `lanekeeper land` | Rebases and pushes your lane onto the integration branch through a FIFO queue, so two lanes are never mid-push at once. Agents run this themselves — see below. |
 | `lanekeeper sync` | Fast-forwards your main checkout so a dev server actually sees what just landed. |
@@ -82,7 +82,7 @@ crashed run's copy needs to clean itself up without anyone noticing it died.
 ## ⚡ Quickstart
 
 ```bash
-npm install --save-dev lane-keeper   # or: pnpm add -D / yarn add -D / bun add -d
+npm install --save-dev lanekeeper   # or: pnpm add -D / yarn add -D / bun add -d
 npx lanekeeper init
 ```
 
@@ -117,8 +117,8 @@ If `init` couldn't detect a `checkCommand` (no matching script in
 package.json), every push is **blocked** until you set one — see 🧰 What's
 in the box above. That's on purpose.
 
-From here on: `claude --worktree <name>` to spin up an isolated lane — Lane
-Keeper's hook takes it from there, and CLAUDE.md tells the agent the rest.
+From here on: `claude --worktree <name>` to spin up an isolated lane —
+LaneKeeper's hook takes it from there, and CLAUDE.md tells the agent the rest.
 You show up to run `lanekeeper promote` when you actually want to ship. 🚀
 
 ## ⚙️ Configuration
@@ -168,7 +168,7 @@ LANEKEEPER_EMERGENCY_PUSH=1 LANEKEEPER_EMERGENCY_PUSH_CONFIRM=main git push orig
 ```
 
 No confirmation, no tty, no match — it fails **closed**, not open. This is
-the one place in Lane Keeper that's honestly a convention, not a hard
+the one place in LaneKeeper that's honestly a convention, not a hard
 guarantee: the env vars stop mistakes and stray pushes, not a truly
 adversarial agent that decides to set them itself. Worth knowing, not worth
 pretending isn't true.
@@ -241,7 +241,7 @@ Things a sharp reader should already know before they ask:
   --no-verify`, delete the hook, or edit the config on purpose. If your
   threat model includes an agent actively trying to get around this, none
   of this helps, and nothing local-only ever could.
-- **Guarantees a check ran — not that the check is good.** Lane Keeper
+- **Guarantees a check ran — not that the check is good.** LaneKeeper
   enforces that `checkCommand` exists and passed. It has no way to know if
   that's a real test suite or `echo ok`. "Tests are the reviewer" is only
   as true as what's actually in them.

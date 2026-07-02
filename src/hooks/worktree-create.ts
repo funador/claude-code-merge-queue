@@ -4,7 +4,7 @@
  * doesn't compete with that, it plugs into it. A WorktreeCreate hook
  * "replaces default git behavior entirely" (Claude Code's own docs), so
  * this script is responsible for actually creating the worktree; what it
- * adds on top of the native flow is Lane Keeper's numbered-lane convention
+ * adds on top of the native flow is LaneKeeper's numbered-lane convention
  * and a `node_modules` SYMLINK instead of a copy — Claude Code's own
  * `.worktreeinclude` mechanism copies gitignored files in, which is fine
  * for a `.env` file and genuinely expensive for `node_modules`.
