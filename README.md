@@ -71,8 +71,8 @@ config with no checkCommand set **fails every push by default** rather than
 landing unverified code silently.
 
 Every one of those blocks has a real, deliberate way out — see "The
-emergency hatch" below — but it takes two matching, specific pieces of
-intent, not one flag.
+emergency hatch" below — but it takes naming the specific branch you mean
+to push, not one generic flag.
 
 And 🧪 a documented extension point (`src/lib/ephemeral.ts` +
 `examples/ephemeral-tmp-dir.example.ts`) for the thing every setup guide
@@ -147,25 +147,26 @@ any command loads it — not a mysterious failure three steps later.
 
 Every blocked push — the integration branch, `productionBranch`, anything
 in `protectedBranches` — has a real way through it. It's meant to be used
-rarely and on purpose, so it asks for two separate, specific things instead
-of one flag an agent could set just as easily as a human:
+rarely and on purpose, so it asks you to name the exact branch you're
+pushing to, not just flip a boolean an agent (or a fat-fingered alias)
+could set just as easily as a human:
 
 ```bash
-LANEKEEPER_EMERGENCY_PUSH=1 git push origin HEAD:main
+LANEKEEPER_EMERGENCY_PUSH_CONFIRM=main git push origin HEAD:main
 ```
 
-That alone isn't enough — you'll be prompted, right there in your terminal,
-to **type the exact branch name** to confirm. No terminal attached (CI, a
-script)? Provide the second factor yourself instead:
+One var, one shot — works the same whether it's set by a script that
+already knows what it's doing or typed by hand. If you're at a real
+terminal and would rather not pre-type the branch name into the command,
+`LANEKEEPER_EMERGENCY_PUSH=1` alone gets you an interactive prompt that
+asks you to **type the exact branch name** and fills `CONFIRM` in for you —
+same one env var, just supplied at a different moment. No terminal attached
+and no `CONFIRM` set (CI, a script that forgot it)? No confirmation, no
+match — it fails **closed**, not open.
 
-```bash
-LANEKEEPER_EMERGENCY_PUSH=1 LANEKEEPER_EMERGENCY_PUSH_CONFIRM=main git push origin HEAD:main
-```
-
-No confirmation, no tty, no match — it fails **closed**, not open. This is
-the one place in LaneKeeper that's honestly a convention, not a hard
-guarantee: the env vars stop mistakes and stray pushes, not a truly
-adversarial agent that decides to set them itself. Worth knowing, not worth
+This is the one place in LaneKeeper that's honestly a convention, not a
+hard guarantee: the env var stops mistakes and stray pushes, not a truly
+adversarial agent that decides to set it itself. Worth knowing, not worth
 pretending isn't true.
 
 ## 🙌 The hands-off part

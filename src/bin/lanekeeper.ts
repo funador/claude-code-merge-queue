@@ -269,13 +269,14 @@ async function main(): Promise<void> {
         process.exit(0);
       }
 
-      // LANEKEEPER_EMERGENCY_PUSH=1 alone isn't enough — that's one flag an
-      // agent (or a fat-fingered alias) could set as easily as a human. The
-      // second factor is naming the exact branch, either non-interactively
-      // (LANEKEEPER_EMERGENCY_PUSH_CONFIRM=<branch>, for a scripted case
-      // that already knows what it's doing) or by typing it at a real
-      // terminal right now. No tty available means no confirmation — fails
-      // closed, not open.
+      // The actual gate (checkPush, below) only cares about
+      // LANEKEEPER_EMERGENCY_PUSH_CONFIRM=<branch> — naming the exact branch
+      // IS the confirmation, one var, one shot, whether it's set up front by
+      // a script or typed by a human. This block is purely a convenience for
+      // a human at a real terminal who set LANEKEEPER_EMERGENCY_PUSH=1
+      // without already knowing/typing the branch name: prompt for it live
+      // and fill CONFIRM in. No tty available means no prompt to answer —
+      // falls through to checkPush, which fails closed, not open.
       if (process.env.LANEKEEPER_EMERGENCY_PUSH === "1" && !process.env.LANEKEEPER_EMERGENCY_PUSH_CONFIRM) {
         const target = refUpdates[0]?.remoteRef.replace("refs/heads/", "");
         if (target) {
