@@ -34,7 +34,7 @@ function addLaneWorktree(mainTop: string, laneNum: number): string {
   return wt;
 }
 
-const cfg = { worktreeSuffix: DEFAULTS.worktreeSuffix, branchPrefix: DEFAULTS.branchPrefix, integrationBranch: "main" };
+const cfg = { worktreeSuffix: DEFAULTS.worktreeSuffix, branchPrefix: DEFAULTS.branchPrefix, integrationBranch: "main", regenerableFiles: [] as string[] };
 
 test("pruneLandedLanes removes a sibling lane whose branch is already fully merged upstream", () => {
   const { mainTop } = makeRepoWithRemote();
@@ -140,6 +140,39 @@ test("pruneLandedLanes leaves a merged-but-dirty worktree alone", () => {
 
     assert.deepEqual(pruned, [], "git worktree remove should refuse a dirty tree, no --force used");
     assert.ok(existsSync(wt1));
+  } finally {
+    rmSync(mainTop, { recursive: true, force: true });
+  }
+});
+
+test("pruneLandedLanes discards regenerable-only dirty files and still prunes — confirmed live, next-env.d.ts/tsconfig.json blocked otherwise-safe lanes", () => {
+  const { mainTop } = makeRepoWithRemote();
+  const cfgWithRegenerable = { ...cfg, regenerableFiles: ["next-env.d.ts", "tsconfig.json"] };
+  try {
+    const wt1 = addLaneWorktree(mainTop, 1);
+    // next-env.d.ts/tsconfig.json must already be TRACKED for this to be
+    // realistic — the real bug was git status showing them MODIFIED (a
+    // build tool rewrote committed files), not untracked. An untracked
+    // file can't be `git checkout --`'d back to anything; that's not what
+    // blocked real lanes.
+    writeFileSync(join(wt1, "next-env.d.ts"), "// original\n");
+    writeFileSync(join(wt1, "tsconfig.json"), "{}\n");
+    writeFileSync(join(wt1, "lane1.txt"), "done\n");
+    git(wt1, ["add", "-A"]);
+    git(wt1, ["commit", "-q", "-m", "lane 1 work"]);
+    git(wt1, ["push", "-q", "origin", "HEAD:main"]);
+    git(mainTop, ["fetch", "origin", "--quiet"]);
+    git(mainTop, ["merge", "--ff-only", "origin/main"]);
+    // A build tool rewriting its own regenerated output — the exact shape
+    // that silently blocked pruning on otherwise fully-landed, idle lanes.
+    writeFileSync(join(wt1, "next-env.d.ts"), "// regenerated\n");
+    writeFileSync(join(wt1, "tsconfig.json"), '{"regenerated": true}\n');
+    const wt1Real = realpathSync(wt1);
+
+    const pruned = pruneLandedLanes(mainTop, cfgWithRegenerable, "/some/other/currently-active-lane");
+
+    assert.deepEqual(pruned, [wt1Real], "regenerable-only dirt should not block pruning a genuinely merged lane");
+    assert.ok(!existsSync(wt1));
   } finally {
     rmSync(mainTop, { recursive: true, force: true });
   }

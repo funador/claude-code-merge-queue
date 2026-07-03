@@ -26,7 +26,13 @@
  *      another lane's land before its own first commit.
  *   3. `git worktree remove` (no `--force`) refuses on its own if the
  *      worktree has uncommitted changes — dirty work is never discarded
- *      just because its branch happens to be merged.
+ *      just because its branch happens to be merged. The ONE exception,
+ *      matching `sync`/`land`: files listed in `regenerableFiles`
+ *      (next-env.d.ts and the like) are discarded first and the removal
+ *      retried, since a build tool rewriting its own output shouldn't be
+ *      the thing that leaves an otherwise fully-landed lane stuck forever.
+ *      Any OTHER dirty file blocks pruning exactly as before — real
+ *      uncommitted work is never discarded just to tidy up disk space.
  * Deleting the now-redundant local branch (`git branch -d`, never `-D`) is a
  * separate, best-effort tidiness step AFTER the worktree is already gone —
  * it checks merge state against local HEAD rather than origin, so it can
@@ -76,6 +82,15 @@ function existsRealpath(path: string): string {
   }
 }
 
+function tryRemoveWorktree(mainTop: string, wt: string): boolean {
+  try {
+    execFileSync("git", ["worktree", "remove", wt], { cwd: mainTop, stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function listWorktrees(mainTop: string): WorktreeEntry[] {
   const out = execFileSync("git", ["worktree", "list", "--porcelain"], { cwd: mainTop, encoding: "utf8" });
   const entries: WorktreeEntry[] = [];
@@ -106,7 +121,7 @@ function listWorktrees(mainTop: string): WorktreeEntry[] {
  */
 export function pruneLandedLanes(
   mainTop: string,
-  cfg: Pick<LaneKeeperConfig, "worktreeSuffix" | "branchPrefix" | "integrationBranch">,
+  cfg: Pick<LaneKeeperConfig, "worktreeSuffix" | "branchPrefix" | "integrationBranch" | "regenerableFiles">,
   currentWorktree: string,
 ): string[] {
   const pruned: string[] = [];
@@ -118,6 +133,7 @@ export function pruneLandedLanes(
   const laneDirPrefix = `${basename(mainTopReal)}${cfg.worktreeSuffix}`;
   const parent = dirname(mainTopReal);
   const upstream = `origin/${cfg.integrationBranch}`;
+  const regenerable = new Set(cfg.regenerableFiles);
 
   let worktrees: WorktreeEntry[];
   try {
@@ -142,11 +158,22 @@ export function pruneLandedLanes(
 
     if (hasLiveProcessInside(wt)) continue; // someone's actively in here — never touch it
 
-    try {
-      execFileSync("git", ["worktree", "remove", wt], { cwd: mainTop, stdio: "ignore" });
-    } catch {
-      continue; // dirty or busy — worktree remove refused on its own, nothing removed
+    let removed = tryRemoveWorktree(mainTop, wt);
+    if (!removed) {
+      // Blocked by dirty files? Only retry if EVERY one of them is a
+      // configured regenerable file — anything else is real uncommitted
+      // work, and this lane is left alone exactly as before.
+      const dirty = execFileSync("git", ["status", "--porcelain"], { cwd: wt, encoding: "utf8" })
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => line.slice(3).trim());
+      const blocking = dirty.filter((f) => !regenerable.has(f));
+      if (dirty.length > 0 && blocking.length === 0) {
+        execFileSync("git", ["checkout", "--", ...dirty], { cwd: wt, stdio: "ignore" });
+        removed = tryRemoveWorktree(mainTop, wt);
+      }
     }
+    if (!removed) continue; // still dirty (real work) or otherwise busy — leave it alone
 
     // The worktree is gone — this is now unconditionally a pruned lane,
     // regardless of what happens to the branch ref below.
