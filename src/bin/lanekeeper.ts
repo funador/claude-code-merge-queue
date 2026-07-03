@@ -37,9 +37,15 @@ async function init(): Promise<void> {
   const { writeFileSync, readFileSync: read, existsSync, appendFileSync } = await import("node:fs");
   const { join } = await import("node:path");
 
+  // What actually got newly written or modified this run — only these need
+  // committing. If everything below was already wired from a previous run,
+  // there's nothing new to tell you to commit.
+  const writtenFiles: string[] = [];
+
   if (hasConfig(root)) {
     console.log("lanekeeper init: lanekeeper.config.mjs already exists — leaving it alone.");
   } else {
+    writtenFiles.push("lanekeeper.config.mjs");
     const detectedBranch = detectCurrentBranch(root);
     const detectedCheck = detectCheckCommand(root);
     const generated = {
@@ -81,9 +87,11 @@ export default ${JSON.stringify(generated, null, 2)};
   if (!existsSync(claudeMdPath)) {
     writeFileSync(claudeMdPath, `# Project instructions for Claude Code\n\n${snippet}`);
     console.log(`lanekeeper init: wrote ${claudeMdPath}`);
+    writtenFiles.push("CLAUDE.md");
   } else if (!read(claudeMdPath, "utf8").includes(MARKER)) {
     appendFileSync(claudeMdPath, `\n${snippet}`);
     console.log(`lanekeeper init: appended the LaneKeeper workflow section to ${claudeMdPath}`);
+    writtenFiles.push("CLAUDE.md");
   } else {
     console.log(`lanekeeper init: ${claudeMdPath} already has the LaneKeeper workflow section — leaving it alone.`);
   }
@@ -92,9 +100,11 @@ export default ${JSON.stringify(generated, null, 2)};
   switch (claudeSettingsResult) {
     case "created":
       console.log(`lanekeeper init: wrote ${join(root, ".claude", "settings.json")} with the WorktreeCreate hook.`);
+      writtenFiles.push(".claude/settings.json");
       break;
     case "merged":
       console.log(`lanekeeper init: added the WorktreeCreate hook to your existing ${join(root, ".claude", "settings.json")}.`);
+      writtenFiles.push(".claude/settings.json");
       break;
     case "already-wired":
       console.log("lanekeeper init: .claude/settings.json already has the WorktreeCreate hook — leaving it alone.");
@@ -109,9 +119,11 @@ export default ${JSON.stringify(generated, null, 2)};
   switch (prePushResult) {
     case "created":
       console.log("lanekeeper init: wrote .husky/pre-push.");
+      writtenFiles.push(".husky/pre-push");
       break;
     case "merged":
       console.log("lanekeeper init: appended LaneKeeper's checks to your existing .husky/pre-push.");
+      writtenFiles.push(".husky/pre-push");
       break;
     case "already-wired":
       console.log("lanekeeper init: .husky/pre-push already wired — leaving it alone.");
@@ -146,6 +158,7 @@ export default ${JSON.stringify(generated, null, 2)};
   switch (scriptsResult.result) {
     case "added":
       console.log(`lanekeeper init: added "${scriptsResult.added.join('", "')}" to package.json scripts.`);
+      writtenFiles.push("package.json");
       break;
     case "already-wired":
       console.log("lanekeeper init: package.json already has all five scripts — leaving them alone.");
@@ -161,9 +174,13 @@ export default ${JSON.stringify(generated, null, 2)};
 
   console.log("");
   console.log("Next steps:");
-  console.log("  1. Commit everything it wrote — lanekeeper.config.mjs, CLAUDE.md, .claude/settings.json,");
-  console.log("     .husky/pre-push, and package.json.");
-  console.log("  2. claude --worktree <name> — the agent takes it from there.");
+  if (writtenFiles.length > 0) {
+    console.log(`  1. Commit what it wrote — ${writtenFiles.join(", ")}.`);
+    console.log("  2. claude --worktree <name> — the agent takes it from there.");
+  } else {
+    console.log("  1. claude --worktree <name> — the agent takes it from there.");
+    console.log("     (everything was already wired — nothing new to commit)");
+  }
 }
 
 async function main(): Promise<void> {

@@ -70,3 +70,26 @@ test("init wires land/sync/promote/preview scripts into package.json end-to-end,
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("Next steps only lists files actually written this run — not a static list that includes package.json when there wasn't one", () => {
+  const dir = scratchRepo("main"); // no package.json — e.g. a non-Node repo
+  try {
+    const out = runInit(dir);
+    assert.match(out, /Commit what it wrote — lanekeeper\.config\.mjs, CLAUDE\.md, \.claude\/settings\.json/);
+    assert.doesNotMatch(out, /and package\.json/, "nothing was written to package.json — must not tell you to commit it");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("Next steps says there's nothing new to commit when a second init run finds everything already wired", () => {
+  const dir = scratchRepo("main");
+  try {
+    runInit(dir);
+    const out = runInit(dir);
+    assert.match(out, /nothing new to commit/);
+    assert.doesNotMatch(out, /^ {2}1\. Commit/m);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

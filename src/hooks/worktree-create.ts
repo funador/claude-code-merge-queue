@@ -24,7 +24,7 @@
  * automatically — nothing to release by hand.
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, symlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, symlinkSync } from "node:fs";
 import { dirname, join, basename, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadConfig, hasConfig, DEFAULTS, type LaneKeeperConfig } from "../lib/config.js";
@@ -151,6 +151,25 @@ export function isEphemeralNpxCopy(selfPath: string): boolean {
   return selfPath.includes(`${sep}_npx${sep}`);
 }
 
+// The guard above only makes sense for a host project that's an npm project
+// with lanekeeper as a real dependency — hola, say. A non-Node host repo
+// (a Haskell/Lua/Rust/whatever project with no package.json at all) has
+// nowhere to install lanekeeper INTO; npx's ephemeral cache is the only way
+// it can ever run lanekeeper commands, not a fallback masking a broken
+// local install. Only expect a local install — and therefore only treat
+// ephemeral execution as suspicious — when the host's own package.json
+// actually lists lanekeeper as a dependency. No package.json, or one that
+// doesn't mention lanekeeper: ephemeral execution is completely normal.
+export function expectsLocalInstall(mainTop: string): boolean {
+  let pkg: { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
+  try {
+    pkg = JSON.parse(readFileSync(join(mainTop, "package.json"), "utf8")) as typeof pkg;
+  } catch {
+    return false; // no package.json, or unreadable/invalid — nothing "expected" to be there
+  }
+  return Boolean(pkg.dependencies?.lanekeeper || pkg.devDependencies?.lanekeeper);
+}
+
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
@@ -167,13 +186,13 @@ export async function runWorktreeCreateHook(): Promise<void> {
   const fromCwd = input.cwd ?? process.cwd();
 
   try {
-    if (isEphemeralNpxCopy(fileURLToPath(import.meta.url))) {
+    const mainTop = resolveMainCheckout(fromCwd);
+    if (expectsLocalInstall(mainTop) && isEphemeralNpxCopy(fileURLToPath(import.meta.url))) {
       throw new Error(
         "running from npx's ephemeral cache, not this project's own installed dependency — " +
           "node_modules is missing or broken. Run `npm install` in the main checkout and try again.",
       );
     }
-    const mainTop = resolveMainCheckout(fromCwd);
     const cfg = hasConfig(mainTop) ? await loadConfig(mainTop) : { ...DEFAULTS };
     const { wt } = createLane(mainTop, cfg);
     process.stdout.write(wt + "\n");

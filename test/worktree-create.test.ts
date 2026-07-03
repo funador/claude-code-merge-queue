@@ -5,7 +5,7 @@ import { existsSync, mkdtempSync, readdirSync, realpathSync, rmSync, mkdirSync, 
 import { tmpdir } from "node:os";
 import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createLane, isEphemeralNpxCopy } from "../src/hooks/worktree-create.js";
+import { createLane, isEphemeralNpxCopy, expectsLocalInstall } from "../src/hooks/worktree-create.js";
 import { DEFAULTS } from "../src/lib/config.js";
 
 const WORKER = fileURLToPath(new URL("./helpers/worktree-create-worker.ts", import.meta.url));
@@ -161,6 +161,27 @@ test("isEphemeralNpxCopy detects npm's npx cache path and nothing else", () => {
   );
 });
 
+test("expectsLocalInstall is true only when the host's own package.json actually declares lanekeeper", () => {
+  const dir = mkdtempSync(join(tmpdir(), "lanekeeper-expects-"));
+  try {
+    assert.equal(expectsLocalInstall(dir), false, "no package.json at all — e.g. a Haskell/Rust/Lua repo");
+
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "x" }));
+    assert.equal(expectsLocalInstall(dir), false, "package.json exists but never mentions lanekeeper");
+
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ devDependencies: { lanekeeper: "^0.1.7" } }));
+    assert.equal(expectsLocalInstall(dir), true, "declared as a devDependency — a local install is expected");
+
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ dependencies: { lanekeeper: "^0.1.7" } }));
+    assert.equal(expectsLocalInstall(dir), true, "declared as a regular dependency too");
+
+    writeFileSync(join(dir, "package.json"), "{ not valid json");
+    assert.equal(expectsLocalInstall(dir), false, "unparseable package.json — nothing safely known to expect");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("the hook refuses to run and fails loud when invoked from npx's ephemeral cache instead of the project's real install", async () => {
   // Reproduces the actual production incident: node_modules/lanekeeper was
   // missing/mid-upgrade, .claude/settings.json's `npx lanekeeper hook
@@ -171,6 +192,12 @@ test("the hook refuses to run and fails loud when invoked from npx's ephemeral c
   // code, running from a path under npm's own `_npx` cache directory
   // convention, must refuse to proceed instead of silently claiming a lane.
   const mainTop = makeScratchRepo();
+  // The guard only fires when the host project actually expects a local
+  // install — declare lanekeeper as a devDependency, matching hola's real
+  // package.json at the time of the incident.
+  writeFileSync(join(mainTop, "package.json"), JSON.stringify({ devDependencies: { lanekeeper: "^0.1.3" } }));
+  execFileSync("git", ["add", "-A"], { cwd: mainTop });
+  execFileSync("git", ["commit", "-q", "-m", "add package.json"], { cwd: mainTop });
   const npxSimRoot = mkdtempSync(join(tmpdir(), "lanekeeper-npxsim-"));
   const copyRoot = join(npxSimRoot, "_npx", "deadbeef1234", "node_modules", "lanekeeper");
   try {
@@ -198,6 +225,41 @@ test("the hook refuses to run and fails loud when invoked from npx's ephemeral c
 
     const claimedLane = join(dirname(realpathSync(mainTop)), `${basename(realpathSync(mainTop))}${DEFAULTS.worktreeSuffix}1`);
     assert.ok(!existsSync(claimedLane), "no worktree should have been created");
+  } finally {
+    cleanupRepoAndLanes(mainTop);
+    rmSync(npxSimRoot, { recursive: true, force: true });
+  }
+});
+
+test("a non-Node host repo (no package.json at all) can still create a lane from npx's ephemeral cache — that's the only way it can ever run, not a broken install", async () => {
+  // Caught live testing against real non-JS repos (Haskell, in that case):
+  // a host project with no package.json has nowhere to `npm install`
+  // lanekeeper INTO, so npx's ephemeral cache is the only way it can ever
+  // run lanekeeper commands. The guard above must not treat that as a
+  // broken install for a project that was never expected to have a local
+  // one in the first place.
+  const mainTop = makeScratchRepo(); // no package.json — e.g. a Haskell/Rust/Lua repo
+  const npxSimRoot = mkdtempSync(join(tmpdir(), "lanekeeper-npxsim-nonnode-"));
+  const copyRoot = join(npxSimRoot, "_npx", "deadbeef5678", "node_modules", "lanekeeper");
+  try {
+    mkdirSync(copyRoot, { recursive: true });
+    writeFileSync(join(copyRoot, "package.json"), JSON.stringify({ type: "module" }));
+    cpSync(join(REPO_ROOT, "src"), join(copyRoot, "src"), { recursive: true });
+    mkdirSync(join(copyRoot, "test", "helpers"), { recursive: true });
+    cpSync(join(REPO_ROOT, "test", "helpers"), join(copyRoot, "test", "helpers"), { recursive: true });
+
+    const copiedWorker = join(copyRoot, "test", "helpers", "worktree-create-worker.ts");
+    const child = spawn("node", ["--import", "tsx", copiedWorker], { stdio: ["pipe", "pipe", "pipe"] });
+    child.stdin.end(JSON.stringify({ cwd: mainTop }));
+
+    let stdout = "";
+    child.stdout.on("data", (d) => (stdout += d));
+    const result = await new Promise<{ code: number }>((resolve) => {
+      child.on("exit", (code) => resolve({ code: code ?? 1 }));
+    });
+
+    assert.equal(result.code, 0, "must succeed — ephemeral execution is normal here, not a broken install");
+    assert.ok(existsSync(stdout.trim()), "the lane should actually have been created");
   } finally {
     cleanupRepoAndLanes(mainTop);
     rmSync(npxSimRoot, { recursive: true, force: true });
