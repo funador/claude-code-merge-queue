@@ -25,7 +25,8 @@
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, symlinkSync } from "node:fs";
-import { dirname, join, basename } from "node:path";
+import { dirname, join, basename, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { loadConfig, hasConfig, DEFAULTS, type LaneKeeperConfig } from "../lib/config.js";
 import { resolveMainCheckout } from "../lib/main-checkout.js";
 
@@ -131,6 +132,25 @@ export function createLane(mainTop: string, cfg: LaneKeeperConfig): { wt: string
   }
 }
 
+// `.claude/settings.json` invokes this hook via `npx lanekeeper hook
+// worktree-create` rather than a project script, precisely because a raw
+// hook command has no `node_modules/.bin` on its PATH the way `npm run`
+// does — npx's own directory-walking local resolution is what makes that
+// work at all. The problem: npx treats a package it can't resolve locally as
+// license to silently fetch an ephemeral, unpinned copy from the registry
+// and run *that* instead of failing — which is exactly what happens when the
+// host project's own install of lanekeeper is missing or mid-upgrade (npm
+// removes the old version's files before extracting the new one; anything
+// that interrupts that leaves precisely this state). That fallback ran
+// silently for long enough in production to block two lanes from landing
+// before anyone noticed node_modules was broken. Refuse to proceed if this
+// module is executing from npx's ephemeral cache instead of the project's
+// own installed copy, so a broken install fails loud immediately instead of
+// limping along on a stand-in version nobody asked for.
+export function isEphemeralNpxCopy(selfPath: string): boolean {
+  return selfPath.includes(`${sep}_npx${sep}`);
+}
+
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
@@ -147,6 +167,12 @@ export async function runWorktreeCreateHook(): Promise<void> {
   const fromCwd = input.cwd ?? process.cwd();
 
   try {
+    if (isEphemeralNpxCopy(fileURLToPath(import.meta.url))) {
+      throw new Error(
+        "running from npx's ephemeral cache, not this project's own installed dependency — " +
+          "node_modules is missing or broken. Run `npm install` in the main checkout and try again.",
+      );
+    }
     const mainTop = resolveMainCheckout(fromCwd);
     const cfg = hasConfig(mainTop) ? await loadConfig(mainTop) : { ...DEFAULTS };
     const { wt } = createLane(mainTop, cfg);

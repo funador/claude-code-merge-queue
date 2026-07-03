@@ -266,6 +266,19 @@ Things a sharp reader should already know before they ask:
   refuses to touch any worktree with a live process's cwd inside it right
   now. That check needs `lsof` on PATH; if it's missing, pruning fails
   closed (treats liveness as unknown, never removes) rather than guessing.
+- **The `WorktreeCreate` hook needs the host project's own real install.**
+  It runs via `npx lanekeeper hook worktree-create` (a raw hook command has
+  no `node_modules/.bin` on its PATH, unlike an `npm run` script) — but npx
+  silently falls back to fetching an ephemeral, unpinned copy when it can't
+  resolve the package locally, which is exactly what happens if the host
+  project's own `node_modules` install of lanekeeper is missing or
+  mid-upgrade. That's a real failure mode, not hypothetical: it happened in
+  production and the fallback ran silently long enough to mask a broken
+  install for two lane-landings. The hook now refuses to run at all if it
+  detects it's executing from npx's ephemeral cache rather than the
+  project's own installed copy, so a broken install fails loud immediately
+  (`npm install` and retry) instead of quietly limping along on a
+  mismatched stand-in version.
 
 ## 🧬 Where this came from
 
