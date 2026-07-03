@@ -17,6 +17,14 @@ import { fileURLToPath } from "node:url";
 const HOOK_COMMAND = "npx lanekeeper hook worktree-create";
 const PRE_PUSH_MARKER = "lanekeeper check-push";
 
+const PACKAGE_SCRIPTS: Record<string, string> = {
+  land: "lanekeeper land",
+  sync: "lanekeeper sync",
+  promote: "lanekeeper promote",
+  preview: "lanekeeper preview",
+  "preview:restore": "lanekeeper preview --restore",
+};
+
 export type WireResult = "created" | "merged" | "already-wired" | "unparseable" | "no-husky";
 
 interface ClaudeSettings {
@@ -139,4 +147,40 @@ export function ensureHooksPath(root: string): HooksPathResult {
 
   execFileSync("git", ["config", "core.hooksPath", ".husky"], { cwd: root });
   return "set";
+}
+
+export type ScriptsWireResult = "added" | "already-wired" | "unparseable" | "no-package-json";
+
+/**
+ * The last "copy this yourself" step `init` used to leave on the table:
+ * Quickstart told you to hand-add five scripts to package.json instead of
+ * just adding them. Same additive/idempotent contract as the rest of this
+ * file — only ever fills in scripts that don't exist yet, never overwrites
+ * one you've customized (e.g. if `land` already runs something of yours
+ * first), and does nothing if all five are already there.
+ */
+export function wirePackageJsonScripts(root: string): { result: ScriptsWireResult; added: string[] } {
+  const path = join(root, "package.json");
+  if (!existsSync(path)) return { result: "no-package-json", added: [] };
+
+  let pkg: { scripts?: Record<string, string>; [key: string]: unknown };
+  try {
+    pkg = JSON.parse(readFileSync(path, "utf8")) as typeof pkg;
+  } catch {
+    return { result: "unparseable", added: [] };
+  }
+
+  pkg.scripts ??= {};
+  const added: string[] = [];
+  for (const [name, command] of Object.entries(PACKAGE_SCRIPTS)) {
+    if (!(name in pkg.scripts)) {
+      pkg.scripts[name] = command;
+      added.push(name);
+    }
+  }
+
+  if (added.length === 0) return { result: "already-wired", added: [] };
+
+  writeFileSync(path, JSON.stringify(pkg, null, 2) + "\n");
+  return { result: "added", added };
 }

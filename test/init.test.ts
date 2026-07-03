@@ -52,3 +52,21 @@ test("init on detached HEAD warns instead of silently defaulting to main", () =>
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("init wires land/sync/promote/preview scripts into package.json end-to-end, without asking you to do it by hand", () => {
+  const dir = scratchRepo("main");
+  writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "x", scripts: { test: "echo ok" } }));
+  try {
+    const out = runInit(dir);
+    assert.match(out, /added "land", "sync", "promote", "preview", "preview:restore" to package\.json scripts/);
+    const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+    assert.equal(pkg.scripts.test, "echo ok", "pre-existing script must survive");
+    assert.equal(pkg.scripts.land, "lanekeeper land");
+    assert.equal(pkg.scripts.sync, "lanekeeper sync");
+    assert.equal(pkg.scripts.promote, "lanekeeper promote");
+    assert.equal(pkg.scripts.preview, "lanekeeper preview");
+    assert.equal(pkg.scripts["preview:restore"], "lanekeeper preview --restore");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

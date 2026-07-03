@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { wireClaudeSettings, wireHuskyPrePush, ensureHooksPath } from "../src/lib/wire-hooks.js";
+import { wireClaudeSettings, wireHuskyPrePush, ensureHooksPath, wirePackageJsonScripts } from "../src/lib/wire-hooks.js";
 
 function scratchDir(): string {
   return mkdtempSync(join(tmpdir(), "lanekeeper-wire-"));
@@ -163,6 +163,70 @@ test("ensureHooksPath leaves a deliberate custom hooksPath alone", () => {
     execFileSync("git", ["config", "core.hooksPath", "custom-hooks-dir"], { cwd: dir });
     assert.equal(ensureHooksPath(dir), "custom-path");
     assert.equal(execFileSync("git", ["config", "core.hooksPath"], { cwd: dir, encoding: "utf8" }).trim(), "custom-hooks-dir");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("wirePackageJsonScripts adds all five scripts to a fresh package.json", () => {
+  const dir = scratchDir();
+  try {
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "x" }));
+    const { result, added } = wirePackageJsonScripts(dir);
+    assert.equal(result, "added");
+    assert.deepEqual(added.sort(), ["land", "preview", "preview:restore", "promote", "sync"].sort());
+    const written = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+    assert.equal(written.scripts.land, "lanekeeper land");
+    assert.equal(written.scripts.sync, "lanekeeper sync");
+    assert.equal(written.scripts.promote, "lanekeeper promote");
+    assert.equal(written.scripts.preview, "lanekeeper preview");
+    assert.equal(written.scripts["preview:restore"], "lanekeeper preview --restore");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("wirePackageJsonScripts never overwrites a script you've already customized", () => {
+  const dir = scratchDir();
+  try {
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ scripts: { land: "npm run lint && lanekeeper land" } }));
+    const { result, added } = wirePackageJsonScripts(dir);
+    assert.equal(result, "added");
+    assert.ok(!added.includes("land"), "must not report an already-customized script as added");
+    assert.deepEqual(added.sort(), ["preview", "preview:restore", "promote", "sync"].sort());
+    const written = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+    assert.equal(written.scripts.land, "npm run lint && lanekeeper land", "custom script must survive untouched");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("wirePackageJsonScripts is idempotent", () => {
+  const dir = scratchDir();
+  try {
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "x" }));
+    wirePackageJsonScripts(dir);
+    assert.deepEqual(wirePackageJsonScripts(dir), { result: "already-wired", added: [] });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("wirePackageJsonScripts reports no-package-json instead of creating one from scratch", () => {
+  const dir = scratchDir();
+  try {
+    assert.deepEqual(wirePackageJsonScripts(dir), { result: "no-package-json", added: [] });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("wirePackageJsonScripts leaves unparseable package.json untouched", () => {
+  const dir = scratchDir();
+  try {
+    writeFileSync(join(dir, "package.json"), "{ not valid json");
+    assert.deepEqual(wirePackageJsonScripts(dir), { result: "unparseable", added: [] });
+    assert.equal(readFileSync(join(dir, "package.json"), "utf8"), "{ not valid json");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

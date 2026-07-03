@@ -16,7 +16,7 @@ import { runWorktreeCreateHook } from "../hooks/worktree-create.js";
 import { lanePort } from "../lib/lane-port.js";
 import { claudeMdSnippet, MARKER } from "../lib/claude-md-snippet.js";
 import { detectCheckCommand, runCheckCommand } from "../lib/check-command.js";
-import { wireClaudeSettings, wireHuskyPrePush, ensureHooksPath } from "../lib/wire-hooks.js";
+import { wireClaudeSettings, wireHuskyPrePush, ensureHooksPath, wirePackageJsonScripts } from "../lib/wire-hooks.js";
 import { resolveMainCheckout } from "../lib/main-checkout.js";
 import { pruneLandedLanes } from "../lib/prune-lanes.js";
 
@@ -142,13 +142,28 @@ export default ${JSON.stringify(generated, null, 2)};
     }
   }
 
+  const scriptsResult = wirePackageJsonScripts(root);
+  switch (scriptsResult.result) {
+    case "added":
+      console.log(`lanekeeper init: added "${scriptsResult.added.join('", "')}" to package.json scripts.`);
+      break;
+    case "already-wired":
+      console.log("lanekeeper init: package.json already has all five scripts — leaving them alone.");
+      break;
+    case "no-package-json":
+      console.log("lanekeeper init: no package.json found — scripts NOT wired automatically.");
+      console.log('  Add "land"/"sync"/"promote"/"preview"/"preview:restore" -> "lanekeeper <name>" yourself.');
+      break;
+    case "unparseable":
+      console.log("lanekeeper init: package.json exists but isn't valid JSON — left untouched. Wire the scripts manually.");
+      break;
+  }
+
   console.log("");
   console.log("Next steps:");
-  console.log("  1. Check lanekeeper.config.mjs — integrationBranch/checkCommand were auto-detected;");
-  console.log("     set productionBranch too if you run a two-stage model.");
-  console.log('  2. Add to package.json "scripts": land, sync, promote, preview -> "lanekeeper <name>".');
-  console.log("  3. Commit lanekeeper.config.mjs, CLAUDE.md, .claude/settings.json, and .husky/pre-push.");
-  console.log("  4. claude --worktree <name> — the agent takes it from there.");
+  console.log("  1. Commit everything it wrote — lanekeeper.config.mjs, CLAUDE.md, .claude/settings.json,");
+  console.log("     .husky/pre-push, and package.json.");
+  console.log("  2. claude --worktree <name> — the agent takes it from there.");
 }
 
 async function main(): Promise<void> {

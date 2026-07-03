@@ -102,17 +102,11 @@ This does the whole setup, not just the config file:
 - **`.husky/pre-push`** — created or appended to, *if* you already have
   Husky. If you don't, `init` tells you so instead of silently writing to
   the untracked, not-shared-with-your-team `.git/hooks/pre-push`.
+- **`package.json` scripts** — `land`, `sync`, `promote`, `preview`, and
+  `preview:restore` added, skipping any you've already defined yourself.
 
-**Commit everything it wrote.** Then add to `package.json`:
-```json
-"scripts": {
-  "land": "lanekeeper land",
-  "sync": "lanekeeper sync",
-  "promote": "lanekeeper promote",
-  "preview": "lanekeeper preview",
-  "preview:restore": "lanekeeper preview --restore"
-}
-```
+**Commit everything it wrote**, then you're running. Two steps, not a setup
+guide.
 
 If `init` couldn't detect a `checkCommand` (no matching script in
 package.json), every push is **blocked** until you set one — see 🧰 What's
