@@ -1,6 +1,6 @@
 {
   "name": "lanekeeper",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "The local, zero-cost merge queue for parallel Claude Code agents. Plugs into Claude Code's native worktree isolation; one build at a time, one landing at a time, zero races.",
   "type": "module",
   "license": "MIT",
