@@ -14,13 +14,11 @@
  *
  * Every branch here (including the integration branch, which used to have
  * NO override at all) also has a genuine emergency hatch: set
- * LANEKEEPER_EMERGENCY_PUSH_CONFIRM=<exact branch name> and push. Naming the
- * specific branch IS the confirmation — a boolean flag next to it wouldn't
- * add anything a script or a fat-fingered alias couldn't set just as easily.
- * The CLI's check-push handler also offers a live convenience for a human
- * sitting at a real terminal: set LANEKEEPER_EMERGENCY_PUSH=1 alone and it
- * prompts you interactively for the branch name and fills CONFIRM in for
- * you — same one env var either way, just typed at a different moment.
+ * LANEKEEPER_EMERGENCY_PUSH=1 and push. One env var, no prompts, no second
+ * factor to remember — the same trust model as LANEKEEPER_LANDING=1 above
+ * it. This is a convention, not a hard guarantee: it stops mistakes and
+ * stray pushes, not a truly adversarial agent that sets it itself. Worth
+ * knowing, not worth building 18 hoops to (marginally) defend against.
  */
 import type { LaneKeeperConfig } from "./config.js";
 
@@ -47,8 +45,8 @@ export function parseRefUpdates(stdin: string): RefUpdate[] {
     });
 }
 
-function emergencyConfirmed(branch: string, env: NodeJS.ProcessEnv): boolean {
-  return env.LANEKEEPER_EMERGENCY_PUSH_CONFIRM === branch;
+function emergencyConfirmed(env: NodeJS.ProcessEnv): boolean {
+  return env.LANEKEEPER_EMERGENCY_PUSH === "1";
 }
 
 export function checkPush(
@@ -63,28 +61,26 @@ export function checkPush(
   for (const { remoteRef } of refUpdates) {
     const branch = remoteRef.replace("refs/heads/", "");
 
-    if (protectedRefs.has(remoteRef) && !emergencyConfirmed(branch, env)) {
+    if (protectedRefs.has(remoteRef) && !emergencyConfirmed(env)) {
       return {
         ok: false,
         message: [
           "",
           `✋ Direct pushes to '${branch}' are blocked.`,
           `   This is a protected branch — promote it deliberately, not with a stray push.`,
-          `   Emergency override:  LANEKEEPER_EMERGENCY_PUSH_CONFIRM=${branch} git push …`,
-          `   (or set LANEKEEPER_EMERGENCY_PUSH=1 alone to type "${branch}" at an interactive prompt instead).`,
+          `   Emergency override:  LANEKEEPER_EMERGENCY_PUSH=1 git push …`,
           "",
         ].join("\n"),
       };
     }
-    if (remoteRef === integrationRef && env.LANEKEEPER_LANDING !== "1" && !emergencyConfirmed(branch, env)) {
+    if (remoteRef === integrationRef && env.LANEKEEPER_LANDING !== "1" && !emergencyConfirmed(env)) {
       return {
         ok: false,
         message: [
           "",
           `✋ Direct pushes to '${cfg.integrationBranch}' are blocked — landing goes through the queue.`,
           `   Land your work:  lanekeeper land`,
-          `   Genuine emergency:  LANEKEEPER_EMERGENCY_PUSH_CONFIRM=${cfg.integrationBranch} git push …`,
-          `   (or set LANEKEEPER_EMERGENCY_PUSH=1 alone to type "${cfg.integrationBranch}" at an interactive prompt instead).`,
+          `   Genuine emergency:  LANEKEEPER_EMERGENCY_PUSH=1 git push …`,
           "",
         ].join("\n"),
       };

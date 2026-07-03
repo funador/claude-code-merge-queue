@@ -269,29 +269,8 @@ async function main(): Promise<void> {
         process.exit(0);
       }
 
-      // The actual gate (checkPush, below) only cares about
-      // LANEKEEPER_EMERGENCY_PUSH_CONFIRM=<branch> — naming the exact branch
-      // IS the confirmation, one var, one shot, whether it's set up front by
-      // a script or typed by a human. This block is purely a convenience for
-      // a human at a real terminal who set LANEKEEPER_EMERGENCY_PUSH=1
-      // without already knowing/typing the branch name: prompt for it live
-      // and fill CONFIRM in. No tty available means no prompt to answer —
-      // falls through to checkPush, which fails closed, not open.
-      if (process.env.LANEKEEPER_EMERGENCY_PUSH === "1" && !process.env.LANEKEEPER_EMERGENCY_PUSH_CONFIRM) {
-        const target = refUpdates[0]?.remoteRef.replace("refs/heads/", "");
-        if (target) {
-          const { promptTtyConfirm } = await import("../lib/tty-confirm.js");
-          const typed = promptTtyConfirm(
-            `\n🚨 LANEKEEPER_EMERGENCY_PUSH is set — this bypasses the landing queue.\nType the branch name ("${target}") to confirm, anything else to abort: `,
-          );
-          if (typed === target) {
-            process.env.LANEKEEPER_EMERGENCY_PUSH_CONFIRM = target;
-            console.log(`\nConfirmed — pushing directly to '${target}', bypassing the queue.\n`);
-          } else {
-            console.error(`\n✋ Confirmation didn't match "${target}" exactly — push aborted.\n`);
-            process.exit(1);
-          }
-        }
+      if (process.env.LANEKEEPER_EMERGENCY_PUSH === "1") {
+        console.log("\n🚨 LANEKEEPER_EMERGENCY_PUSH is set — bypassing the landing queue.\n");
       }
 
       const result = checkPush(refUpdates, cfg, process.env);

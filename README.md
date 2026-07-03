@@ -146,23 +146,12 @@ any command loads it — not a mysterious failure three steps later.
 ## 🚨 The emergency hatch
 
 Every blocked push — the integration branch, `productionBranch`, anything
-in `protectedBranches` — has a real way through it. It's meant to be used
-rarely and on purpose, so it asks you to name the exact branch you're
-pushing to, not just flip a boolean an agent (or a fat-fingered alias)
-could set just as easily as a human:
+in `protectedBranches` — has a real way through it. One env var, no
+prompts, no second factor to remember:
 
 ```bash
-LANEKEEPER_EMERGENCY_PUSH_CONFIRM=main git push origin HEAD:main
+LANEKEEPER_EMERGENCY_PUSH=1 git push origin HEAD:main
 ```
-
-One var, one shot — works the same whether it's set by a script that
-already knows what it's doing or typed by hand. If you're at a real
-terminal and would rather not pre-type the branch name into the command,
-`LANEKEEPER_EMERGENCY_PUSH=1` alone gets you an interactive prompt that
-asks you to **type the exact branch name** and fills `CONFIRM` in for you —
-same one env var, just supplied at a different moment. No terminal attached
-and no `CONFIRM` set (CI, a script that forgot it)? No confirmation, no
-match — it fails **closed**, not open.
 
 This is the one place in LaneKeeper that's honestly a convention, not a
 hard guarantee: the env var stops mistakes and stray pushes, not a truly
