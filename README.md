@@ -49,6 +49,30 @@ GitHub already ships a merge queue. Two things it costs you that this doesn't:
 Same idea — serialize landings, test before merge, keep history clean — run
 locally instead of in someone else's billed cloud. 💸
 
+## 🧭 Prior art (so you don't have to wonder)
+
+Nothing here was invented in isolation — worth naming what already existed
+before you find it yourself:
+
+- **[block/agent-task-queue](https://github.com/block/agent-task-queue)**
+  already solves "concurrent agents thrash your machine running simultaneous
+  builds," standalone, with no git or worktree awareness at all.
+  `build-lock` here does the same narrow job, just wired into `land` and
+  lanes instead of running on its own.
+- **[Overstory](https://github.com/jayminwest/overstory)** (now archived)
+  built a FIFO merge queue plus a liveness-based watchdog for a fleet of
+  coding agents — the closest prior match to the landing queue and `prune`
+  here. It's a bigger, multi-runtime orchestration framework with its own
+  agent/worktree layer, not something that plugs into Claude Code's *native*
+  `--worktree`/hook system the way this does; its stated successor moved to
+  a hosted, cloud control-plane model.
+
+What I couldn't find shipped anywhere else, as of this writing: this
+specific combination — sitting on top of Claude Code's own worktree hook
+instead of reimplementing it, a landing queue enforced at the git pre-push
+hook layer, and liveness-aware auto-pruning — as one small, zero-cost, local
+package. If you know of one, open an issue.
+
 ## 🧰 What's in the box
 
 | Command | What it does |
