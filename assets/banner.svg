@@ -12,9 +12,9 @@
   <rect x="40" y="30" width="1320" height="460" rx="28" fill="url(#cardBg)" stroke="rgba(255,255,255,0.08)" filter="url(#cardShadow)"></rect>
 
   <rect x="96" y="100" width="46" height="82" rx="15" fill="#1A2338" stroke="rgba(255,255,255,0.28)" stroke-width="1.5"></rect>
-  <circle cx="119" cy="124" r="7.5" fill="#FF4D4D"></circle>
-  <circle cx="119" cy="148" r="7.5" fill="#FFC53D"></circle>
-  <circle cx="119" cy="172" r="7.5" fill="#16E0AD"></circle>
+  <circle cx="119" cy="117" r="7.5" fill="#FF4D4D"></circle>
+  <circle cx="119" cy="141" r="7.5" fill="#FFC53D"></circle>
+  <circle cx="119" cy="165" r="7.5" fill="#16E0AD"></circle>
 
   <text x="164" y="178" font-family="&#39;DM Sans&#39;, system-ui, -apple-system, &#39;Segoe UI&#39;, Roboto, sans-serif" font-weight="700" font-size="56" fill="#F5F7FA">Claude Code Local Merge</text>
 
