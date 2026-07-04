@@ -56,7 +56,7 @@ locally instead of in someone else's billed cloud. 💸
 | `localmerge hook worktree-create` | A Claude Code `WorktreeCreate` hook. Plugs LocalMerge's numbered lanes into Claude's *native* worktree creation — doesn't reinvent it. |
 | `localmerge build-lock -- <cmd>` | Runs `<cmd>` — your build — serialized across every lane, machine-wide. |
 | `localmerge land` | Rebases and pushes your lane onto the integration branch through a FIFO queue, so two lanes are never mid-push at once. Agents run this themselves — see below. |
-| `localmerge sync` | Fast-forwards your main checkout so a dev server actually sees what just landed. |
+| `localmerge sync` | Fast-forwards your main checkout so a dev server actually sees what just landed — and re-installs dependencies if the lockfile changed, so the `node_modules` every lane symlinks from never goes stale. |
 | `localmerge promote` | Ships the integration branch to production. **Human-only** — never in an agent's instructions, never automated. |
 | `localmerge preview` | Instantly mirrors a lane's live working tree — uncommitted changes included — onto the main checkout, so you can look at it without a build. |
 | `localmerge port` | Prints a lane's dev-server port, derived from its own directory name. |

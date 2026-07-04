@@ -16,11 +16,44 @@
  *     file (configured in localmerge.config), it discards that file and
  *     retries. Any other dirty file → warn and skip.
  */
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { loadConfig, type LocalMergeConfig } from "./lib/config.js";
 import { resolveMainCheckout } from "./lib/main-checkout.js";
+import { detectPackageManager } from "./lib/check-command.js";
 
 const LOCK_RETRIES = 3;
+
+// Keyed by detectPackageManager's return value. bun writes either lockfile
+// name depending on version, so both are checked.
+const LOCKFILES: Record<string, string[]> = {
+  npm: ["package-lock.json"],
+  pnpm: ["pnpm-lock.yaml"],
+  yarn: ["yarn.lock"],
+  bun: ["bun.lockb", "bun.lock"],
+};
+
+/**
+ * The main checkout's node_modules is the one every lane symlinks from
+ * (see localmerge.config's `symlinks`). Fast-forwarding its git state does
+ * nothing to that directory — if the range we just pulled in changed the
+ * lockfile, every lane is now silently running on stale dependencies until
+ * someone happens to run `npm install` here by hand. Do it automatically,
+ * the same moment the git state lands, so the gap never opens.
+ */
+function refreshDependenciesIfChanged(root: string, before: string, after: string): void {
+  const pm = detectPackageManager(root);
+  const lockfiles = LOCKFILES[pm] ?? [];
+  const changed = git(root, ["diff", "--name-only", before, after], { allowFail: true }).out.split("\n");
+  if (!lockfiles.some((f) => changed.includes(f))) return;
+
+  console.log(`localmerge sync: lockfile changed — running "${pm} install" so the shared node_modules (symlinked into every lane) stays in sync…`);
+  const result = spawnSync(pm, ["install"], { cwd: root, stdio: "inherit" });
+  if (result.status !== 0) {
+    console.error(`localmerge sync: "${pm} install" failed (exit ${result.status ?? 1}) — shared node_modules may be stale. Run it manually in ${root}.`);
+  } else {
+    console.log("localmerge sync: dependencies refreshed.");
+  }
+}
 
 interface GitResult {
   ok: boolean;
@@ -131,6 +164,7 @@ export async function sync(providedCfg?: LocalMergeConfig): Promise<number> {
       console.log(`localmerge sync: ${branch} already current at ${after}.`);
     } else {
       console.log(`localmerge sync: fast-forwarded ${branch} ${before} → ${after} — the dev server will pick it up.`);
+      refreshDependenciesIfChanged(MAIN, before, after);
     }
     return 0;
   }

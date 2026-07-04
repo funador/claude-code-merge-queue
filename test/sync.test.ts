@@ -1,11 +1,36 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sync } from "../src/sync.js";
 import { DEFAULTS } from "../src/lib/config.js";
+
+/**
+ * A fake `npm` on PATH that just records it ran, instead of doing a real
+ * (slow, network-dependent) install. Returns the marker file path — assert
+ * against its contents, or its absence, to prove install ran or didn't.
+ */
+function fakePackageManagerBin(exitCode = 0): { binDir: string; marker: string } {
+  const binDir = mkdtempSync(join(tmpdir(), "localmerge-fakebin-"));
+  const marker = join(binDir, "install-ran.txt");
+  writeFileSync(join(binDir, "npm"), `#!/bin/sh\necho "$@" >> "${marker}"\nexit ${exitCode}\n`);
+  chmodSync(join(binDir, "npm"), 0o755);
+  return { binDir, marker };
+}
+
+function pushLockfileChange(remote: string, filename: string, message: string): void {
+  const other = mkdtempSync(join(tmpdir(), "localmerge-sync-other-"));
+  execFileSync("git", ["clone", "--quiet", remote, other]);
+  git(other, ["config", "user.email", "test@test.com"]);
+  git(other, ["config", "user.name", "Test"]);
+  writeFileSync(join(other, filename), "v2\n");
+  git(other, ["add", "-A"]);
+  git(other, ["commit", "-q", "-m", message]);
+  git(other, ["push", "-q", "origin", "main"]);
+  rmSync(other, { recursive: true, force: true });
+}
 
 function git(cwd: string, args: string[]): string {
   return execFileSync("git", args, { cwd, encoding: "utf8" });
@@ -132,5 +157,76 @@ test("sync(providedCfg) uses the caller's already-loaded config instead of re-de
   } finally {
     process.chdir(cwd);
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("sync runs an install when the fast-forwarded range changed package-lock.json — the shared node_modules every lane symlinks would otherwise go stale", async () => {
+  const { dir, remote } = makeRepoWithRemote();
+  const cwd = process.cwd();
+  const { binDir, marker } = fakePackageManagerBin();
+  const originalPath = process.env.PATH;
+  try {
+    pushLockfileChange(remote, "package-lock.json", "bump a dep");
+
+    process.chdir(dir);
+    process.env.PATH = `${binDir}:${originalPath}`;
+    const code = await sync();
+    assert.equal(code, 0);
+    assert.ok(existsSync(marker), "expected npm install to have run");
+    assert.equal(readFileSync(marker, "utf8").trim(), "install");
+  } finally {
+    process.env.PATH = originalPath;
+    process.chdir(cwd);
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(binDir, { recursive: true, force: true });
+  }
+});
+
+test("sync skips the install when the fast-forwarded range left the lockfile untouched", async () => {
+  const { dir, remote } = makeRepoWithRemote();
+  const cwd = process.cwd();
+  const { binDir, marker } = fakePackageManagerBin();
+  const originalPath = process.env.PATH;
+  try {
+    pushLockfileChange(remote, "file.txt", "unrelated change");
+
+    process.chdir(dir);
+    process.env.PATH = `${binDir}:${originalPath}`;
+    const code = await sync();
+    assert.equal(code, 0);
+    assert.ok(!existsSync(marker), "install should not have run — lockfile didn't change");
+  } finally {
+    process.env.PATH = originalPath;
+    process.chdir(cwd);
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(binDir, { recursive: true, force: true });
+  }
+});
+
+test("sync still reports success (git state IS correctly fast-forwarded) even if the install itself fails, but says so", async () => {
+  const { dir, remote } = makeRepoWithRemote();
+  const cwd = process.cwd();
+  const { binDir } = fakePackageManagerBin(1);
+  const originalPath = process.env.PATH;
+  try {
+    pushLockfileChange(remote, "package-lock.json", "bump a dep");
+
+    process.chdir(dir);
+    process.env.PATH = `${binDir}:${originalPath}`;
+    let stderr = "";
+    const origError = console.error;
+    console.error = (...args: unknown[]) => {
+      stderr += args.join(" ");
+    };
+    const code = await sync();
+    console.error = origError;
+
+    assert.equal(code, 0);
+    assert.match(stderr, /install.*failed/i);
+  } finally {
+    process.env.PATH = originalPath;
+    process.chdir(cwd);
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(binDir, { recursive: true, force: true });
   }
 });
