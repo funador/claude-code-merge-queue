@@ -4,14 +4,14 @@
       <stop offset="0" stop-color="#0B1120"></stop>
       <stop offset="1" stop-color="#111C31"></stop>
     </linearGradient>
-    <filter id="cardShadow" x="-8%" y="-12%" width="116%" height="132%">
-      <feDropShadow dx="0" dy="22" stdDeviation="26" flood-color="#0B1120" flood-opacity="0.40"></feDropShadow>
+    <filter id="cardShadow" x="-4%" y="-6%" width="108%" height="118%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#0B1120" flood-opacity="0.28"></feDropShadow>
     </filter>
   </defs>
 
   <rect x="40" y="30" width="1320" height="460" rx="28" fill="url(#cardBg)" stroke="rgba(255,255,255,0.08)" filter="url(#cardShadow)"></rect>
 
-  <rect x="96" y="100" width="46" height="82" rx="15" fill="#05070E" stroke="rgba(255,255,255,0.12)"></rect>
+  <rect x="96" y="100" width="46" height="82" rx="15" fill="#1A2338" stroke="rgba(255,255,255,0.28)" stroke-width="1.5"></rect>
   <circle cx="119" cy="124" r="7.5" fill="#FF4D4D"></circle>
   <circle cx="119" cy="148" r="7.5" fill="#FFC53D"></circle>
   <circle cx="119" cy="172" r="7.5" fill="#16E0AD"></circle>
