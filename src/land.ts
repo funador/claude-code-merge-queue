@@ -54,16 +54,26 @@ export async function land(): Promise<void> {
   // regenerableFiles, exactly like sync does for the fast-forward on the
   // other end. Any other dirty file is real work-in-progress: leave it alone
   // and let the rebase fail loud.
+  //
+  // Checked here AND again right before the rebase itself (not just once):
+  // a build tool can regenerate one of these files at any point, including
+  // during the (possibly long) wait for the landing queue lock below. A
+  // single check up front leaves that whole wait as a window where the
+  // exact same harmless noise reappears and gets misreported as a real
+  // rebase conflict instead of silently discarded like it should be.
   const regenerable = new Set(cfg.regenerableFiles);
-  const status = execSync("git status --porcelain", { encoding: "utf8" });
-  const dirty = status
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => line.slice(3).trim());
-  const blocking = dirty.filter((f) => !regenerable.has(f));
-  if (dirty.length > 0 && blocking.length === 0) {
-    execSync(`git checkout -- ${dirty.map((f) => `"${f}"`).join(" ")}`);
+  function discardRegenerableDirt(): void {
+    const status = execSync("git status --porcelain", { encoding: "utf8" });
+    const dirty = status
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => line.slice(3).trim());
+    const blocking = dirty.filter((f) => !regenerable.has(f));
+    if (dirty.length > 0 && blocking.length === 0) {
+      execSync(`git checkout -- ${dirty.map((f) => `"${f}"`).join(" ")}`);
+    }
   }
+  discardRegenerableDirt();
 
   const lock = createQueueLock("land");
   await lock.acquire({
@@ -80,6 +90,7 @@ export async function land(): Promise<void> {
   let exitCode = 0;
   try {
     console.log(`${DIM}[land-queue] ${branch}: lock acquired — landing…${RESET}`);
+    discardRegenerableDirt(); // re-check right before the rebase — see comment above
 
     console.log(`${DIM}fetching origin/${cfg.integrationBranch}…${RESET}`);
     execSync(`git fetch origin ${cfg.integrationBranch} --quiet`, { stdio: "inherit" });
