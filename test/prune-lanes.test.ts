@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pruneLandedLanes } from "../src/lib/prune-lanes.js";
+import { isClaudeProcessRow, pruneLandedLanes } from "../src/lib/prune-lanes.js";
 import { DEFAULTS } from "../src/lib/config.js";
 
 function git(cwd: string, args: string[]): string {
@@ -193,25 +193,62 @@ test("pruneLandedLanes ignores worktrees that don't match this repo's lane namin
   }
 });
 
-test("pruneLandedLanes never removes a lane with a live process cwd'd into it, even a brand-new lane trivially 'merged' because it hasn't diverged yet", async () => {
+test("pruneLandedLanes prunes a merged lane even when an unrelated process is still cwd'd into it — the confirmed live bug", async () => {
+  // Confirmed live: a fully-landed, already-abandoned lane stayed stuck on
+  // disk indefinitely because a leftover MCP server process (spawned by the
+  // Claude session that has since exited) was still sitting there. Any
+  // live process used to count as "still in use" — this proves an
+  // unrelated one (sleep, standing in for that MCP server) no longer does.
+  const { mainTop } = makeRepoWithRemote();
+  const child = spawnSyncHelper();
+  try {
+    const wt1 = addLaneWorktree(mainTop, 1);
+    const wt1Real = realpathSync(wt1); // git worktree list reports the realpath-resolved form
+    writeFileSync(join(wt1, "lane1.txt"), "done\n");
+    git(wt1, ["add", "-A"]);
+    git(wt1, ["commit", "-q", "-m", "lane 1 work"]);
+    git(wt1, ["push", "-q", "origin", "HEAD:main"]);
+    git(mainTop, ["fetch", "origin", "--quiet"]);
+    git(mainTop, ["merge", "--ff-only", "origin/main"]);
+
+    const proc = child.spawn("sleep", ["30"], { cwd: wt1 });
+    await child.waitUntilCwdVisible(wt1);
+
+    const pruned = pruneLandedLanes(mainTop, cfg, "/some/other/currently-active-lane");
+
+    assert.deepEqual(pruned, [wt1Real]);
+    assert.ok(!existsSync(wt1));
+    proc.kill();
+  } finally {
+    rmSync(mainTop, { recursive: true, force: true });
+  }
+});
+
+test("pruneLandedLanes still never removes a lane with an actual Claude Code session cwd'd into it, even a brand-new lane trivially 'merged' because it hasn't diverged yet", async () => {
   // The exact bug this closes: a fresh lane with ZERO commits is trivially
   // an ancestor of upstream (its tip IS already a commit on the integration
   // branch) — structurally identical, in the git graph alone, to a lane
   // whose real work already landed. Confirmed live: this swept a fresh
   // lane out from under whoever was about to start using it.
+  //
+  // Faking a real OS process that lsof reports as "claude" isn't practical
+  // here (renaming/copying a binary gets killed by macOS Gatekeeper, and
+  // Node's process.title fools `ps` but not `lsof`) — so this shims a fake
+  // `lsof` onto PATH instead, the same technique used elsewhere in this
+  // test suite for fake package managers.
   const { mainTop } = makeRepoWithRemote();
-  const child = spawnSyncHelper();
+  const { binDir } = fakeLsofReporting("claude.ex  1234  jesse  cwd  DIR 1,18  64  123  __TARGET__");
+  const originalPath = process.env.PATH;
   try {
     const freshLane = addLaneWorktree(mainTop, 1); // zero commits beyond main — "merged" only because it never diverged
-    const proc = child.spawn("sleep", ["30"], { cwd: freshLane });
-    await child.waitUntilCwdVisible(freshLane);
+    process.env.PATH = `${binDir}:${originalPath}`;
 
     const pruned = pruneLandedLanes(mainTop, cfg, "/some/other/currently-active-lane");
 
-    assert.deepEqual(pruned, [], "a lane with a live process inside must never be pruned, regardless of merge status");
+    assert.deepEqual(pruned, [], "a lane with a live Claude Code session inside must never be pruned, regardless of merge status");
     assert.ok(existsSync(freshLane));
-    proc.kill();
   } finally {
+    process.env.PATH = originalPath;
     rmSync(mainTop, { recursive: true, force: true });
   }
 });
@@ -237,3 +274,32 @@ function spawnSyncHelper() {
     },
   };
 }
+
+// A fake `lsof` that always reports the same single row (with `__TARGET__`
+// substituted for whatever directory it was actually asked about), so a
+// test can deterministically control what hasLiveProcessInside() sees
+// without depending on any real process's name.
+function fakeLsofReporting(rowTemplate: string): { binDir: string } {
+  const binDir = mkdtempSync(join(tmpdir(), "claude-code-local-merge-fake-lsof-"));
+  const script = `#!/bin/sh\ndir="\${*: -1}"\necho "COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME"\necho "${rowTemplate}" | sed "s|__TARGET__|\\$dir|"\n`;
+  writeFileSync(join(binDir, "lsof"), script);
+  chmodSync(join(binDir, "lsof"), 0o755);
+  return { binDir };
+}
+
+test("isClaudeProcessRow matches the Claude Code binary, however lsof happens to truncate/case it", () => {
+  assert.equal(isClaudeProcessRow("claude.ex  58316  jesse  cwd  DIR 1,18  64  123  /some/lane"), true, "macOS truncates COMMAND to ~9 chars");
+  assert.equal(isClaudeProcessRow("claude  58316  jesse  cwd  DIR 1,18  64  123  /some/lane"), true);
+  assert.equal(isClaudeProcessRow("CLAUDE  58316  jesse  cwd  DIR 1,18  64  123  /some/lane"), true, "case-insensitive");
+  assert.equal(isClaudeProcessRow("  claude.ex  58316  jesse  cwd  DIR 1,18  64  123  /some/lane"), true, "leading whitespace tolerated");
+});
+
+test("isClaudeProcessRow does not match unrelated processes that happen to share a lane's cwd", () => {
+  // The exact confirmed-live bug: an orphaned MCP server process kept an
+  // already-landed, already-abandoned lane stuck on disk forever because
+  // it counted as "still in use." None of these should count.
+  assert.equal(isClaudeProcessRow("node  4441  jesse  cwd  DIR 1,18  64  123  /some/lane"), false);
+  assert.equal(isClaudeProcessRow("caffeinat  14829  jesse  cwd  DIR 1,18  64  123  /some/lane"), false);
+  assert.equal(isClaudeProcessRow("mcp  4441  jesse  cwd  DIR 1,18  64  123  /some/lane"), false);
+  assert.equal(isClaudeProcessRow(""), false, "an empty row (blank line) never matches");
+});

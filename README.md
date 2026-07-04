@@ -254,12 +254,18 @@ Things a sharp reader should already know before they ask:
   CLAUDE.md tells it to resolve the conflict itself and re-run `land`, the
   same way it'd fix any other bug — `checkCommand` still gates the result
   either way, so a bad resolution gets caught there.
-- **Auto-pruning checks for a live process, via `lsof`.** A merged branch
-  alone isn't enough to prune a lane — a brand-new, zero-commit lane is
-  *trivially* "merged" too (nothing's diverged yet), so pruning also
-  refuses to touch any worktree with a live process's cwd inside it right
-  now. That check needs `lsof` on PATH; if it's missing, pruning fails
-  closed (treats liveness as unknown, never removes) rather than guessing.
+- **Auto-pruning checks for a live Claude Code session, via `lsof`.** A
+  merged branch alone isn't enough to prune a lane — a brand-new,
+  zero-commit lane is *trivially* "merged" too (nothing's diverged yet), so
+  pruning also refuses to touch any worktree with a live Claude Code
+  process cwd'd into it right now. Deliberately narrower than "any process
+  at all": a lane accumulates incidental subprocesses (an MCP server, a
+  stray build/watch process) whose lifetime doesn't track the session that
+  spawned them — confirmed live, a lingering MCP server process kept a
+  fully-landed, already-abandoned lane stuck on disk indefinitely, since
+  everything used to count as "still in use." That check needs `lsof` on
+  PATH; if it's missing, pruning fails closed (treats liveness as unknown,
+  never removes) rather than guessing.
 - **The `WorktreeCreate` hook needs the host project's own real install.**
   It runs via `npx claude-code-local-merge hook worktree-create` (a raw hook command has
   no `node_modules/.bin` on its PATH, unlike an `npm run` script) — but npx

@@ -46,25 +46,41 @@ import { basename, dirname } from "node:path";
 import type { ClaudeCodeLocalMergeConfig } from "./config.js";
 
 /**
- * Is any live process's current working directory inside `dir` right now?
- * `lsof`'s own exit code is NOT reliable for this — it returns non-zero
- * both when nothing matches AND when it merely fails to inspect some
- * unrelated process it lacks permission for (common, e.g. root-owned system
- * daemons), even while correctly printing real matches. The trustworthy
- * signal is whether stdout has any content at all: genuinely idle
- * directories produce completely empty output; a live process's cwd entry
- * always prints a real row. `-a` ANDs the two filters together (lsof ORs by
- * default) so this only matches things actually inside `dir`, not every
- * process on the system.
+ * Is a Claude Code session's current working directory inside `dir` right
+ * now? `lsof`'s own exit code is NOT reliable for this — it returns
+ * non-zero both when nothing matches AND when it merely fails to inspect
+ * some unrelated process it lacks permission for (common, e.g. root-owned
+ * system daemons), even while correctly printing real matches. `-a` ANDs
+ * the two filters together (lsof ORs by default) so this only matches
+ * things actually inside `dir`, not every process on the system.
+ *
+ * Deliberately narrower than "any process at all": a lane keeps
+ * accumulating incidental subprocesses whose lifetime doesn't track the
+ * Claude Code session that spawned them — an MCP server is the confirmed
+ * live case (a lingering `@brightdata/mcp` process kept a fully-landed,
+ * already-abandoned lane stuck on disk indefinitely; caffeinate and stray
+ * build/watch processes are the same shape of problem). Counting any of
+ * those as "still in use" means a lane can never actually get swept once
+ * its real agent session exits, which defeats the entire point of pruning.
+ * Only a row whose COMMAND column is actually the Claude Code binary
+ * counts as "someone's still working here" — matched by prefix since
+ * `lsof` truncates COMMAND (macOS: `claude.ex`, so an exact match would be
+ * platform-fragile in the other direction).
  *
  * If `lsof` isn't available at all, this fails CLOSED — treats liveness as
  * unknown/possible rather than confirmed-safe, so an unverifiable state
  * never gets treated the same as a verified-idle one.
  */
+/** Exported so the matching rule itself is unit-testable without spawning real processes. */
+export function isClaudeProcessRow(lsofRow: string): boolean {
+  return (lsofRow.trim().split(/\s+/)[0] ?? "").toLowerCase().startsWith("claude");
+}
+
 function hasLiveProcessInside(dir: string): boolean {
   const result = spawnSync("lsof", ["-a", "-d", "cwd", "+D", dir], { encoding: "utf8" });
   if (result.error) return true; // lsof missing/unspawnable — can't verify, assume in use
-  return result.stdout.trim().length > 0;
+  const rows = result.stdout.trim().split("\n").slice(1); // drop the header row
+  return rows.some(isClaudeProcessRow);
 }
 
 interface WorktreeEntry {
