@@ -163,83 +163,62 @@ prompts, no second factor to remember:
 CLAUDE_CODE_LOCAL_MERGE_EMERGENCY_PUSH=1 git push origin HEAD:main
 ```
 
-This is the one place in Claude Code Local Merge that's honestly a convention, not a
-hard guarantee: the env var stops mistakes and stray pushes, not a truly
-adversarial agent that decides to set it itself. Worth knowing, not worth
-pretending isn't true.
+This is the one place that's honestly a convention, not a hard guarantee:
+it stops mistakes and stray pushes, not an adversarial agent that sets the
+var itself.
 
 ## 🙌 The hands-off part
 
-Tests are the reviewer. Not a human, at any point in this pipeline — and
-that's a deliberate, named tradeoff, not an oversight.
+Tests are the reviewer, not a human, at any point in this pipeline.
 
 - **`checkCommand` gates landing.** Nothing reaches `integrationBranch`
-  without passing it. This is the first, and for most changes the *only*,
-  correctness check anything gets.
-- **`claude-code-local-merge promote` is a release decision, not a code review.**
-  Running it means "this batch of already-landed, already-tested work
-  should ship now" — not "I read the diff and it looks right." If your own
-  CI provider also runs checks against the production branch (most real
-  setups have this — a deploy gate, an E2E suite, whatever), that's a
-  *second automated* checkpoint, still not a human one.
+  without passing it — the only correctness check most changes get.
+- **`claude-code-local-merge promote` is a release decision, not a code
+  review.** It means "this already-tested work should ship now," not "I
+  read the diff." Your own CI on the production branch is a second
+  automated checkpoint — still not a human one.
 - **When something gets through anyway, the fix is a test, not a
-  reviewer.** If a bug lands, the answer isn't "a human should have caught
-  that" — it's "what check would have caught it, and why didn't it exist
-  yet." Every miss becomes a permanent guardrail instead of a one-off
-  catch, which is the only version of this that scales past however many
-  diffs one person can actually read.
+  reviewer.** Every miss becomes a permanent guardrail, not a one-off catch.
 
-This isn't for every team. If what you actually want is a human looking at
-every change before it ships, this tool will feel like it's missing a
-step — because it is, on purpose. It's built for the case where you trust
-the agent's *output conditional on the checks being real*, and the checks
-being non-optional (see 🧰 above) is what makes that trust earned rather
-than assumed.
+Not for every team — if you want a human looking at every change before it
+ships, this is missing that step on purpose.
 
 ## 🔁 The one idea underneath most of it
 
 The build queue, the landing queue, and the ephemeral-resource pattern are
-all crash-safe the **same way**, on purpose:
+all crash-safe the **same way**:
 
 1. Claim a resource.
 2. Tag the claim with your process ID.
 3. Let liveness — not a timeout — decide when a claim is stale.
 
-`queue-lock.ts` does it for the build and landing queues. `ephemeral.ts`
-does it for whatever test resource you wire in. `Kill -9` any of them
-mid-claim, and the next process to come along notices the PID is dead and
-reclaims it.
+`queue-lock.ts` does it for the build and landing queues; `ephemeral.ts`
+does it for test resources. `kill -9` any of them mid-claim, and the next
+process notices the PID is dead and reclaims it.
 
-The `WorktreeCreate` hook uses a cousin of the same idea, adapted to the fact
-that it's a one-shot script with no long-lived process to check liveness
-against: the claim IS the worktree, and `git worktree add` failing on an
-already-taken path is the atomicity guard, delegated straight to git instead
-of a PID file.
+The `WorktreeCreate` hook is a cousin of the same idea for a one-shot
+script with no process to check liveness against: the claim IS the
+worktree, and `git worktree add` failing on an already-taken path is the
+atomicity guard.
 
-Either way: no stale locks, no "just restart your laptop," no magic number
-for how long is too long to wait. ✅ Structurally impossible beats politely
-requested, every time.
+No stale locks, no "just restart your laptop," no magic timeout number. ✅
 
 ## 🔍 Know the limits
 
 Things a sharp reader should already know before they ask:
 
 - **One machine, not a fleet.** The FIFO queue lives in local temp storage —
-  it doesn't coordinate across laptops. Two machines landing at the same
-  moment just get git's own ordinary non-fast-forward rejection (safe, not
-  corrupting — the loser re-fetches and retries, same as any team without a
-  queue does today). This solves the one-machine problem completely; it was
-  never trying to solve the distributed one.
+  it doesn't coordinate across laptops. Two machines landing at once just
+  get git's ordinary non-fast-forward rejection (safe, not corrupting — the
+  loser re-fetches and retries, same as any team without a queue does today).
 - **Not a security boundary.** Every guardrail here stops mistakes and
-  convention drift — a fast, confident, forgetful agent — not a truly
-  adversarial one. An agent with shell access can always `git push
-  --no-verify`, delete the hook, or edit the config on purpose. If your
-  threat model includes an agent actively trying to get around this, none
-  of this helps, and nothing local-only ever could.
-- **Guarantees a check ran — not that the check is good.** Claude Code Local Merge
-  enforces that `checkCommand` exists and passed. It has no way to know if
-  that's a real test suite or `echo ok`. "Tests are the reviewer" is only
-  as true as what's actually in them.
+  convention drift, not a truly adversarial agent. Shell access always
+  means `git push --no-verify`, deleting the hook, or editing the config on
+  purpose — nothing local-only can stop that.
+- **Guarantees a check ran — not that it's good.** It enforces that
+  `checkCommand` exists and passed, with no way to know if that's a real
+  test suite or `echo ok`. "Tests are the reviewer" is only as true as
+  what's actually in them.
 - **The `WorktreeCreate` hook is the youngest piece of this stack** — Claude
   Code shipped it Feb 2026. Losing it degrades gracefully: fall back to
   `git worktree add` by hand and you still keep the build queue, landing
@@ -249,45 +228,32 @@ Things a sharp reader should already know before they ask:
   machine-wide. A 3–4 minute suite caps you well under 20 landings/hour
   flat-out, before any queue wait.
 - **Rebase conflicts abort, they never guess.** `git rebase --abort` on any
-  conflict, working tree left clean — it never auto-resolves or silently
-  picks a side. In the normal flow that "you" is the agent, not a human:
-  CLAUDE.md tells it to resolve the conflict itself and re-run `land`, the
-  same way it'd fix any other bug — `checkCommand` still gates the result
-  either way, so a bad resolution gets caught there.
+  conflict, working tree left clean. Normally "you" here is the agent, not
+  a human — CLAUDE.md tells it to resolve the conflict and re-run `land`,
+  same as any other bug; `checkCommand` still catches a bad resolution.
 - **Auto-pruning checks for a live Claude Code session, via `lsof`.** A
-  merged branch alone isn't enough to prune a lane — a brand-new,
-  zero-commit lane is *trivially* "merged" too (nothing's diverged yet), so
-  pruning also refuses to touch any worktree with a live Claude Code
-  process cwd'd into it right now. Deliberately narrower than "any process
-  at all": a lane accumulates incidental subprocesses (an MCP server, a
-  stray build/watch process) whose lifetime doesn't track the session that
-  spawned them — confirmed live, a lingering MCP server process kept a
-  fully-landed, already-abandoned lane stuck on disk indefinitely, since
-  everything used to count as "still in use." That check needs `lsof` on
-  PATH; if it's missing, pruning fails closed (treats liveness as unknown,
-  never removes) rather than guessing.
+  merged branch alone isn't enough — a brand-new, zero-commit lane is
+  *trivially* "merged" too, so pruning also refuses to touch a worktree
+  with a live Claude Code process in it. Deliberately narrower than "any
+  process at all": an orphaned MCP server or stray build process can
+  outlive the session that spawned it and otherwise keep an abandoned lane
+  stuck forever (confirmed live). Missing `lsof` fails closed — treats
+  liveness as unknown, never removes.
 - **The `WorktreeCreate` hook needs the host project's own real install.**
-  It runs via `npx claude-code-local-merge hook worktree-create` (a raw hook command has
-  no `node_modules/.bin` on its PATH, unlike an `npm run` script) — but npx
-  silently falls back to fetching an ephemeral, unpinned copy when it can't
-  resolve the package locally, which is exactly what happens if the host
-  project's own `node_modules` install of claude-code-local-merge is missing or
-  mid-upgrade. That's a real failure mode, not hypothetical: it happened in
-  production and the fallback ran silently long enough to mask a broken
-  install for two lane-landings. The hook now refuses to run at all if it
-  detects it's executing from npx's ephemeral cache rather than the
-  project's own installed copy, so a broken install fails loud immediately
-  (`npm install` and retry) instead of quietly limping along on a
-  mismatched stand-in version.
+  It runs via `npx claude-code-local-merge hook worktree-create` (no
+  `node_modules/.bin` on PATH for a raw hook, unlike an `npm run` script),
+  and npx silently falls back to an ephemeral, unpinned copy if it can't
+  resolve the package locally — which happened in production and masked a
+  broken install for two lane-landings. The hook now refuses to run at all
+  from npx's ephemeral cache, so a broken install fails loud immediately
+  instead of limping along on a mismatched stand-in.
 
 ## 🧬 Where this came from
 
 This is the extracted, generalized shape of tooling built to run several
-parallel Claude Code agents on one real production codebase (and this repo)
-without them tripping over each other — a build queue, a landing queue
-enforced by a git hook, instant previews, and the ephemeral-resource pattern
-for tests, all sitting on top of Claude Code's own native worktree isolation.
-The names have been filed off; the mechanics haven't.
+parallel Claude Code agents on one real production codebase without them
+tripping over each other. The names have been filed off; the mechanics
+haven't.
 
 ## 📄 License
 
