@@ -1,48 +1,52 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1400" height="490" viewBox="0 0 1400 490" fill="none" role="img" aria-label="Claude Code Local Merge — the local, zero-cost merge queue for parallel Claude Code agents">
   <defs>
-    <filter id="cardShadow" x="-8%" y="-12%" width="116%" height="130%">
-      <feDropShadow dx="0" dy="20" stdDeviation="24" flood-color="#1A1A2E" flood-opacity="0.26"></feDropShadow>
+    <linearGradient id="cardBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B1120"></stop>
+      <stop offset="1" stop-color="#111C31"></stop>
+    </linearGradient>
+    <filter id="cardShadow" x="-8%" y="-12%" width="116%" height="132%">
+      <feDropShadow dx="0" dy="22" stdDeviation="26" flood-color="#0B1120" flood-opacity="0.40"></feDropShadow>
     </filter>
   </defs>
 
   
-  <rect x="60" y="40" width="1280" height="400" rx="24" fill="#FFFFFF" stroke="rgba(0,0,0,0.06)" filter="url(#cardShadow)"></rect>
+  <rect x="60" y="40" width="1280" height="400" rx="24" fill="url(#cardBg)" stroke="rgba(255,255,255,0.08)" filter="url(#cardShadow)"></rect>
 
   
-  <rect x="118" y="150" width="26" height="46" rx="9" fill="#1A1A2E"></rect>
-  <circle cx="131" cy="163" r="4.6" fill="#FF3B3B"></circle>
-  <circle cx="131" cy="174" r="4.6" fill="#FFC400"></circle>
-  <circle cx="131" cy="185" r="4.6" fill="#00C9A7"></circle>
+  <rect x="118" y="132" width="28" height="50" rx="10" fill="#05070E" stroke="rgba(255,255,255,0.12)"></rect>
+  <circle cx="132" cy="146" r="5" fill="#FF4D4D"></circle>
+  <circle cx="132" cy="159" r="5" fill="#FFC53D"></circle>
+  <circle cx="132" cy="172" r="5" fill="#16E0AD"></circle>
 
   
-  <text x="158" y="184" font-family="&#39;DM Sans&#39;, system-ui, -apple-system, &#39;Segoe UI&#39;, Roboto, sans-serif" font-weight="700" font-size="38" fill="#1A1A2E">Claude Code Local Merge</text>
+  <text x="166" y="174" font-family="&#39;DM Sans&#39;, system-ui, -apple-system, &#39;Segoe UI&#39;, Roboto, sans-serif" font-weight="700" font-size="40" fill="#F5F7FA">Claude Code Local Merge</text>
 
   
-  <text x="118" y="231" font-family="&#39;DM Sans&#39;, system-ui, -apple-system, &#39;Segoe UI&#39;, Roboto, sans-serif" font-weight="500" font-size="17" fill="#5A5A72">The local, zero-cost merge queue for parallel</text>
-  <text x="118" y="255" font-family="&#39;DM Sans&#39;, system-ui, -apple-system, &#39;Segoe UI&#39;, Roboto, sans-serif" font-weight="500" font-size="17" fill="#5A5A72">Claude Code agents.</text>
+  <text x="118" y="224" font-family="&#39;DM Sans&#39;, system-ui, -apple-system, &#39;Segoe UI&#39;, Roboto, sans-serif" font-weight="500" font-size="20" fill="#9AA6BC">The local, zero-cost merge queue</text>
+  <text x="118" y="254" font-family="&#39;DM Sans&#39;, system-ui, -apple-system, &#39;Segoe UI&#39;, Roboto, sans-serif" font-weight="500" font-size="20" fill="#9AA6BC">for parallel Claude Code agents.</text>
 
   
-  <rect x="118" y="282" width="446" height="62" rx="10" fill="rgba(255,0,160,0.07)" stroke="rgba(255,0,160,0.22)"></rect>
-  <text x="140" y="309" font-family="&#39;JetBrains Mono&#39;, ui-monospace, SFMono-Regular, Menlo, monospace" font-weight="500" font-size="13" fill="#FF00A0"><tspan fill="#8A8AA0">$ </tspan>npm install --save-dev claude-code-local-merge</text>
-  <text x="140" y="331" font-family="&#39;JetBrains Mono&#39;, ui-monospace, SFMono-Regular, Menlo, monospace" font-weight="500" font-size="13" fill="#FF00A0"><tspan fill="#8A8AA0">$ </tspan>npx claude-code-local-merge init</text>
+  <rect x="118" y="282" width="502" height="74" rx="12" fill="rgba(255,0,160,0.13)" stroke="rgba(255,0,160,0.38)"></rect>
+  <text x="142" y="316" font-family="&#39;JetBrains Mono&#39;, ui-monospace, SFMono-Regular, Menlo, monospace" font-weight="500" font-size="16" fill="#FF6AD0"><tspan fill="#7C8BA5">$ </tspan>npm install --save-dev claude-code-local-merge</text>
+  <text x="142" y="344" font-family="&#39;JetBrains Mono&#39;, ui-monospace, SFMono-Regular, Menlo, monospace" font-weight="500" font-size="16" fill="#FF6AD0"><tspan fill="#7C8BA5">$ </tspan>npx claude-code-local-merge init</text>
 
   
   <g stroke-linecap="round">
-    <path d="M700 120 C 780 120, 800 350, 840 350" stroke="#FF00A0" stroke-width="3"></path>
-    <path d="M700 170 C 860 170, 930 350, 1000 350" stroke="#00D4FF" stroke-width="3"></path>
-    <path d="M700 220 C 920 220, 1070 350, 1150 350" stroke="#9900FF" stroke-width="3"></path>
-    <path d="M700 270 C 980 270, 1180 350, 1270 350" stroke="#00C9A7" stroke-width="3"></path>
+    <path d="M720 120 C 800 120, 820 360, 860 360" stroke="#FF2EAE" stroke-width="3.5"></path>
+    <path d="M720 168 C 880 168, 940 360, 1010 360" stroke="#22D3EE" stroke-width="3.5"></path>
+    <path d="M720 216 C 940 216, 1080 360, 1160 360" stroke="#B57BFF" stroke-width="3.5"></path>
+    <path d="M720 264 C 1000 264, 1200 360, 1290 360" stroke="#10D9A6" stroke-width="3.5"></path>
   </g>
-  <circle cx="700" cy="120" r="4.6" fill="#FF00A0"></circle>
-  <circle cx="700" cy="170" r="4.6" fill="#00D4FF"></circle>
-  <circle cx="700" cy="220" r="4.6" fill="#9900FF"></circle>
-  <circle cx="700" cy="270" r="4.6" fill="#00C9A7"></circle>
-  <circle cx="840" cy="350" r="4.6" fill="#FF00A0"></circle>
-  <circle cx="1000" cy="350" r="4.6" fill="#00D4FF"></circle>
-  <circle cx="1150" cy="350" r="4.6" fill="#9900FF"></circle>
-  <circle cx="1270" cy="350" r="4.6" fill="#00C9A7"></circle>
+  <circle cx="720" cy="120" r="5" fill="#FF2EAE"></circle>
+  <circle cx="720" cy="168" r="5" fill="#22D3EE"></circle>
+  <circle cx="720" cy="216" r="5" fill="#B57BFF"></circle>
+  <circle cx="720" cy="264" r="5" fill="#10D9A6"></circle>
+  <circle cx="860" cy="360" r="5" fill="#FF2EAE"></circle>
+  <circle cx="1010" cy="360" r="5" fill="#22D3EE"></circle>
+  <circle cx="1160" cy="360" r="5" fill="#B57BFF"></circle>
+  <circle cx="1290" cy="360" r="5" fill="#10D9A6"></circle>
 
   
-  <line x1="700" y1="350" x2="1300" y2="350" stroke="#1A1A2E" stroke-width="2"></line>
-  <text x="700" y="378" font-family="&#39;JetBrains Mono&#39;, ui-monospace, SFMono-Regular, Menlo, monospace" font-weight="500" font-size="12" fill="#5A5A72">queue · one push at a time</text>
+  <line x1="720" y1="360" x2="1320" y2="360" stroke="#CBD5E1" stroke-width="2"></line>
+  <text x="720" y="388" font-family="&#39;JetBrains Mono&#39;, ui-monospace, SFMono-Regular, Menlo, monospace" font-weight="500" font-size="14" fill="#94A3B8">queue · one push at a time</text>
 </svg>
