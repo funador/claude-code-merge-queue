@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { wireClaudeSettings, wireHuskyPrePush, ensureHooksPath, wirePackageJsonScripts, wirePreflightScript, preflightScriptContent, PREFLIGHT_FILENAME } from "../src/lib/wire-hooks.js";
 
 function scratchDir(): string {
-  return mkdtempSync(join(tmpdir(), "localmerge-wire-"));
+  return mkdtempSync(join(tmpdir(), "claude-code-local-merge-wire-"));
 }
 
 function scratchGitRepo(): string {
@@ -21,7 +21,7 @@ test("wireClaudeSettings creates .claude/settings.json from scratch", () => {
   try {
     assert.equal(wireClaudeSettings(dir), "created");
     const written = JSON.parse(readFileSync(join(dir, ".claude", "settings.json"), "utf8"));
-    assert.equal(written.hooks.WorktreeCreate[0].hooks[0].command, "npx localmerge hook worktree-create");
+    assert.equal(written.hooks.WorktreeCreate[0].hooks[0].command, "npx claude-code-local-merge hook worktree-create");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -38,7 +38,7 @@ test("wireClaudeSettings merges into an existing settings.json without dropping 
     assert.equal(wireClaudeSettings(dir), "merged");
     const written = JSON.parse(readFileSync(join(dir, ".claude", "settings.json"), "utf8"));
     assert.equal(written.hooks.PreToolUse[0].hooks[0].command, "echo hi", "existing hook must survive");
-    assert.equal(written.hooks.WorktreeCreate[0].hooks[0].command, "npx localmerge hook worktree-create");
+    assert.equal(written.hooks.WorktreeCreate[0].hooks[0].command, "npx claude-code-local-merge hook worktree-create");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -81,7 +81,7 @@ test("wireHuskyPrePush creates pre-push when .husky exists but the hook doesn't"
   try {
     mkdirSync(join(dir, ".husky"));
     assert.equal(wireHuskyPrePush(dir), "created");
-    assert.match(readFileSync(join(dir, ".husky", "pre-push"), "utf8"), /localmerge check-push/);
+    assert.match(readFileSync(join(dir, ".husky", "pre-push"), "utf8"), /claude-code-local-merge check-push/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -95,7 +95,7 @@ test("wireHuskyPrePush appends to an existing custom pre-push without dropping i
     assert.equal(wireHuskyPrePush(dir), "merged");
     const content = readFileSync(join(dir, ".husky", "pre-push"), "utf8");
     assert.match(content, /echo custom logic/);
-    assert.match(content, /localmerge check-push/);
+    assert.match(content, /claude-code-local-merge check-push/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -176,11 +176,11 @@ test("wirePackageJsonScripts adds all seven scripts to a fresh package.json", ()
     assert.equal(result, "added");
     assert.deepEqual(added.sort(), ["land", "preland", "presync", "preview", "preview:restore", "promote", "sync"].sort());
     const written = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
-    assert.equal(written.scripts.land, "localmerge land");
-    assert.equal(written.scripts.sync, "localmerge sync");
-    assert.equal(written.scripts.promote, "localmerge promote");
-    assert.equal(written.scripts.preview, "localmerge preview");
-    assert.equal(written.scripts["preview:restore"], "localmerge preview --restore");
+    assert.equal(written.scripts.land, "claude-code-local-merge land");
+    assert.equal(written.scripts.sync, "claude-code-local-merge sync");
+    assert.equal(written.scripts.promote, "claude-code-local-merge promote");
+    assert.equal(written.scripts.preview, "claude-code-local-merge preview");
+    assert.equal(written.scripts["preview:restore"], "claude-code-local-merge preview --restore");
     assert.equal(written.scripts.preland, `node ${PREFLIGHT_FILENAME} land`);
     assert.equal(written.scripts.presync, `node ${PREFLIGHT_FILENAME} sync`);
   } finally {
@@ -191,13 +191,13 @@ test("wirePackageJsonScripts adds all seven scripts to a fresh package.json", ()
 test("wirePackageJsonScripts never overwrites a script you've already customized", () => {
   const dir = scratchDir();
   try {
-    writeFileSync(join(dir, "package.json"), JSON.stringify({ scripts: { land: "npm run lint && localmerge land" } }));
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ scripts: { land: "npm run lint && claude-code-local-merge land" } }));
     const { result, added } = wirePackageJsonScripts(dir);
     assert.equal(result, "added");
     assert.ok(!added.includes("land"), "must not report an already-customized script as added");
     assert.deepEqual(added.sort(), ["preland", "presync", "preview", "preview:restore", "promote", "sync"].sort());
     const written = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
-    assert.equal(written.scripts.land, "npm run lint && localmerge land", "custom script must survive untouched");
+    assert.equal(written.scripts.land, "npm run lint && claude-code-local-merge land", "custom script must survive untouched");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -237,7 +237,7 @@ test("wirePackageJsonScripts leaves unparseable package.json untouched", () => {
 test("preflightScriptContent embeds the given integration branch, not a hardcoded one", () => {
   const content = preflightScriptContent("dev");
   assert.match(content, /INTEGRATION_BRANCH = "dev"/);
-  assert.doesNotMatch(content, /\brequire\(.localmerge.\)|from "localmerge"/, "must never import the tool it's protecting against a rename of");
+  assert.doesNotMatch(content, /\brequire\(.claude-code-local-merge.\)|from "claude-code-local-merge"/, "must never import the tool it's protecting against a rename of");
 });
 
 test("wirePreflightScript writes the file once and never overwrites it on a second run", () => {
@@ -277,7 +277,7 @@ test("the generated preflight script exits 0 when the target script isn't define
   }
 });
 
-test("the generated preflight script fails loud with an actionable rebase hint when the target script's binary doesn't resolve — the exact lanekeeper->localmerge failure mode", () => {
+test("the generated preflight script fails loud with an actionable rebase hint when the target script's binary doesn't resolve — the exact lanekeeper->claude-code-local-merge failure mode", () => {
   const dir = scratchDir();
   try {
     wirePreflightScript(dir, "dev");

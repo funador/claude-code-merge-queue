@@ -1,14 +1,14 @@
 {
-  "name": "localmerge",
+  "name": "claude-code-local-merge",
   "version": "0.1.12",
   "description": "The local, zero-cost merge queue for parallel Claude Code agents. Plugs into Claude Code's native worktree isolation; one build at a time, one landing at a time, zero races.",
   "type": "module",
   "license": "MIT",
   "author": "Jesse Heaslip",
-  "homepage": "https://github.com/funador/localmerge",
+  "homepage": "https://github.com/funador/claude-code-local-merge",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/funador/localmerge.git"
+    "url": "git+https://github.com/funador/claude-code-local-merge.git"
   },
   "keywords": [
     "claude-code",
@@ -20,7 +20,7 @@
     "monorepo-tooling"
   ],
   "bin": {
-    "localmerge": "dist/bin/localmerge.js"
+    "claude-code-local-merge": "dist/bin/claude-code-local-merge.js"
   },
   "files": [
     "dist",
@@ -33,7 +33,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && chmod +x dist/bin/localmerge.js",
+    "build": "tsc -p tsconfig.json && chmod +x dist/bin/claude-code-local-merge.js",
     "prepare": "npm run build",
     "pretest": "npm run build",
     "test": "node --import tsx --test test/*.test.ts"

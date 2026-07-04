@@ -12,20 +12,20 @@
  *
  * A failed attempt releases the lock rather than holding it hostage — the
  * next lane in line lands next while the failed lane fixes and re-runs
- * `localmerge land` (re-entering the back of the queue). That keeps one
+ * `claude-code-local-merge land` (re-entering the back of the queue). That keeps one
  * broken lane from blocking every OTHER lane's unrelated, ready-to-land
  * work, while still guaranteeing no two lanes are ever mid-push at once.
  *
  * This is only half the guarantee, though — a convention that says "always
- * run `localmerge land`" is exactly the kind of rule a confused agent (or a
+ * run `claude-code-local-merge land`" is exactly the kind of rule a confused agent (or a
  * human under time pressure) eventually skips by hand-rolling `git push`.
  * The other half lives in hooks/pre-push: it hard-rejects a direct push to
- * the integration branch that didn't set LOCALMERGE_LANDING=1, which this
+ * the integration branch that didn't set CLAUDE_CODE_LOCAL_MERGE_LANDING=1, which this
  * script sets right before its own push and nothing else legitimately would.
  * Wire that hook up (see the README) and the queue isn't a convention
  * anymore — it's the only door.
  *
- *   Usage:  localmerge land   (run from a lane worktree, on its own branch)
+ *   Usage:  claude-code-local-merge land   (run from a lane worktree, on its own branch)
  */
 import { execSync, spawnSync } from "node:child_process";
 import { createQueueLock } from "./lib/queue-lock.js";
@@ -38,14 +38,14 @@ const DIM = "\x1b[2m", RESET = "\x1b[0m", RED = "\x1b[31m", GREEN = "\x1b[32m";
 
 export async function land(): Promise<void> {
   if (!hasConfig()) {
-    console.error("localmerge land: no localmerge.config found at the repo root. Run `localmerge init` first.");
+    console.error("claude-code-local-merge land: no claude-code-local-merge.config found at the repo root. Run `claude-code-local-merge init` first.");
     process.exit(1);
   }
   const cfg = await loadConfig();
 
   const branch = execSync("git rev-parse --abbrev-ref HEAD", { encoding: "utf8" }).trim();
   if (branch === cfg.integrationBranch || cfg.protectedBranches.includes(branch) || branch === "HEAD") {
-    console.error(`localmerge land: refusing to run from '${branch}' — land is for lane branches only.`);
+    console.error(`claude-code-local-merge land: refusing to run from '${branch}' — land is for lane branches only.`);
     process.exit(1);
   }
 
@@ -89,28 +89,28 @@ export async function land(): Promise<void> {
     if (rebase.status !== 0) {
       spawnSync("git", ["rebase", "--abort"], { stdio: "ignore" });
       console.error(`\n${RED}land: rebase onto origin/${cfg.integrationBranch} conflicted — aborted, working tree left clean.${RESET}`);
-      console.error(`Resolve it yourself (git fetch origin ${cfg.integrationBranch} && git rebase origin/${cfg.integrationBranch}), then re-run 'localmerge land'.`);
+      console.error(`Resolve it yourself (git fetch origin ${cfg.integrationBranch} && git rebase origin/${cfg.integrationBranch}), then re-run 'claude-code-local-merge land'.`);
       exitCode = 1;
     } else {
       console.log(`${DIM}pushing to ${cfg.integrationBranch} (this is where your CI/checks hook runs)…${RESET}`);
       const push = spawnSync("git", ["push", "origin", `HEAD:${cfg.integrationBranch}`], {
         stdio: "inherit",
-        env: { ...process.env, LOCALMERGE_LANDING: "1" },
+        env: { ...process.env, CLAUDE_CODE_LOCAL_MERGE_LANDING: "1" },
       });
       if (push.status !== 0) {
         console.error(`\n${RED}land: push to ${cfg.integrationBranch} failed — see output above.${RESET}`);
-        console.error(`Fix the failure, then re-run 'localmerge land'.`);
+        console.error(`Fix the failure, then re-run 'claude-code-local-merge land'.`);
         exitCode = 1;
       } else {
         console.log(`${GREEN}✓ ${branch} landed on ${cfg.integrationBranch}.${RESET}`);
         // Landing isn't "done" until the checkout that actually serves your
         // dev server can see it — call sync in-process rather than shelling
-        // back out to the CLI, so this doesn't depend on `localmerge` being
+        // back out to the CLI, so this doesn't depend on `claude-code-local-merge` being
         // resolvable on PATH. Pass this lane's own already-loaded cfg through
         // rather than letting sync() reload from MAIN — MAIN hasn't been
         // fast-forwarded yet at this exact moment (that's what sync is about
         // to do), so if this push just introduced or changed
-        // localmerge.config.mjs itself, a fresh MAIN-side load would silently
+        // claude-code-local-merge.config.mjs itself, a fresh MAIN-side load would silently
         // fall back to DEFAULTS instead of the real config.
         exitCode = await sync(cfg);
 

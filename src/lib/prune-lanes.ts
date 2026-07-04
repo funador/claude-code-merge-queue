@@ -43,7 +43,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { basename, dirname } from "node:path";
-import type { LocalMergeConfig } from "./config.js";
+import type { ClaudeCodeLocalMergeConfig } from "./config.js";
 
 /**
  * Is any live process's current working directory inside `dir` right now?
@@ -121,7 +121,7 @@ function listWorktrees(mainTop: string): WorktreeEntry[] {
  */
 export function pruneLandedLanes(
   mainTop: string,
-  cfg: Pick<LocalMergeConfig, "worktreeSuffix" | "branchPrefix" | "integrationBranch" | "regenerableFiles">,
+  cfg: Pick<ClaudeCodeLocalMergeConfig, "worktreeSuffix" | "branchPrefix" | "integrationBranch" | "regenerableFiles">,
   currentWorktree: string,
 ): string[] {
   const pruned: string[] = [];

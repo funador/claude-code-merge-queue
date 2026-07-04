@@ -1,4 +1,4 @@
-// localmerge.config.mjs — lives at your repo root. `localmerge init` writes a
+// claude-code-local-merge.config.mjs — lives at your repo root. `claude-code-local-merge init` writes a
 // copy of this for you; edit the values below for your project.
 //
 // Worktree isolation is Claude Code's job (native `--worktree` /
@@ -7,7 +7,7 @@
 // it creates, and what everything downstream (build queue, landing queue,
 // preview) reads too.
 
-/** @type {import("localmerge").LocalMergeConfig} */
+/** @type {import("claude-code-local-merge").ClaudeCodeLocalMergeConfig} */
 export default {
   // Lane branches: lane/1, lane/2, ...
   branchPrefix: "lane/",
@@ -19,14 +19,14 @@ export default {
   // each lane also runs its own throwaway dev server.
   portBase: 3000,
 
-  // The branch `localmerge land` rebases onto and pushes to. Agents land
+  // The branch `claude-code-local-merge land` rebases onto and pushes to. Agents land
   // here continuously and autonomously — see the CLAUDE.md workflow section
-  // `localmerge init` writes.
+  // `claude-code-local-merge init` writes.
   integrationBranch: "main",
 
   // Set this if you run a two-stage model: agents land on integrationBranch,
   // a human ships to productionBranch on their own schedule with
-  // `localmerge promote`. null (the default) means integrationBranch IS
+  // `claude-code-local-merge promote`. null (the default) means integrationBranch IS
   // production — no separate promotion step. Example: integrationBranch
   // "dev", productionBranch "main". Automatically protected by the pre-push
   // hook when set — you don't need to also list it below.
@@ -46,14 +46,14 @@ export default {
   // install and no copy of your secrets.
   symlinks: [".env", ".env.local", "node_modules"],
 
-  // Build-output dirs `localmerge preview` never copies onto your dev
+  // Build-output dirs `claude-code-local-merge preview` never copies onto your dev
   // checkout. preview is framework-agnostic (it's an rsync, not a build
   // step) — this is the one place your framework's name shows up. Add
   // ".output" for Nuxt, ".svelte-kit" for SvelteKit, etc.
   buildOutputDirs: ["dist", "build", ".next"],
 
   // The command that actually gates a landing — your lint/typecheck/test/
-  // build. `localmerge init` tries to detect this from package.json
+  // build. `claude-code-local-merge init` tries to detect this from package.json
   // (check:push, check, ci, or test, in that order) and fills it in for
   // you. null means nothing runs, which is only allowed if checksRequired
   // is also false — see below.

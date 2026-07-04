@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npx localmerge hook worktree-create"
+            "command": "npx claude-code-local-merge hook worktree-create"
           }
         ]
       }
