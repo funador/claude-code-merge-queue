@@ -1,23 +1,23 @@
 #!/usr/bin/env sh
-# MergeQueue — landing-queue enforcement + your checks, gating every push.
+# LocalMerge — landing-queue enforcement + your checks, gating every push.
 #
 # Copy this file to .husky/pre-push (recommended — Husky wires it in on
 # your package manager's install step, for every clone and every lane
 # worktree) or straight to
 # .git/hooks/pre-push (works, but isn't versioned or shared with the team).
 # If you already have a pre-push hook, append this block instead of
-# replacing the file. `mergequeue init` does all of this for you.
+# replacing the file. `localmerge init` does all of this for you.
 #
-# `mergequeue check-push` does two things, in order:
+# `localmerge check-push` does two things, in order:
 #   1. Blocks a direct push to your integration/protected/production
-#      branches that didn't go through `mergequeue land` / `promote`.
-#   2. Runs `checkCommand` from mergequeue.config.mjs (your lint/typecheck/
+#      branches that didn't go through `localmerge land` / `promote`.
+#   2. Runs `checkCommand` from localmerge.config.mjs (your lint/typecheck/
 #      test/build) and fails the push if it fails — or if checkCommand
 #      isn't set and checksRequired wasn't deliberately turned off.
 #
 # See src/land.ts and src/lib/check-push.ts for why a convention alone
 # isn't enough to guarantee either of those.
 
-if ! npx mergequeue check-push; then
+if ! npx localmerge check-push; then
   exit 1
 fi

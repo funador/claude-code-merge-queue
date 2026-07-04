@@ -1,4 +1,4 @@
-<svg width="1200" height="420" viewBox="0 0 1200 420" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="MergeQueue — four lanes of parallel agents, each landing on the shared integration branch at a different point in time">
+<svg width="1200" height="420" viewBox="0 0 1200 420" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="LocalMerge — four lanes of parallel agents, each landing on the shared integration branch at a different point in time">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#0b1120"/>
@@ -9,7 +9,7 @@
   <rect x="0" y="0" width="1200" height="420" rx="18" fill="url(#bg)"/>
   <rect x="1" y="1" width="1198" height="418" rx="17" fill="none" stroke="#1e293b" stroke-width="2"/>
 
-  <text x="600" y="54" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="40" font-weight="700" fill="#f8fafc">🚦 MERGEQUEUE</text>
+  <text x="600" y="54" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="40" font-weight="700" fill="#f8fafc">🚦 LOCALMERGE</text>
   <text x="600" y="82" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" fill="#94a3b8">the local, zero-cost merge queue for parallel Claude Code agents</text>
 
   <!-- Row backgrounds — 4 lanes plus the integration branch they all land on -->

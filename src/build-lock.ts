@@ -7,7 +7,7 @@
  * make builds faster — it makes them take turns, via the same cross-worktree
  * FIFO lock everything else in this repo shares (queue-lock.ts).
  *
- *   Usage:  mergequeue build-lock -- <shell command>
+ *   Usage:  localmerge build-lock -- <shell command>
  *
  * Crash-safe with no timeouts: a lock whose holder PID has died is reclaimed
  * deterministically, so a killed build can't wedge the queue for anyone
@@ -22,7 +22,7 @@ import { createQueueLock } from "./lib/queue-lock.js";
 export async function buildLock(commandParts: string[]): Promise<void> {
   const command = commandParts.join(" ").trim();
   if (!command) {
-    console.error("mergequeue build-lock: no command given. Usage: mergequeue build-lock -- <command>");
+    console.error("localmerge build-lock: no command given. Usage: localmerge build-lock -- <command>");
     process.exit(2);
   }
 
@@ -66,7 +66,7 @@ export async function buildLock(commandParts: string[]): Promise<void> {
     }
   });
   child.on("error", (err) => {
-    console.error(`mergequeue build-lock: failed to start command: ${err.message}`);
+    console.error(`localmerge build-lock: failed to start command: ${err.message}`);
     lock.release();
     process.exit(1);
   });

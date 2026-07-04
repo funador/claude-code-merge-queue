@@ -8,14 +8,14 @@ function refLine(remoteRef: string): string {
   return `refs/heads/local abc123 ${remoteRef} def456`;
 }
 
-test("blocks a direct push to the integration branch without MERGEQUEUE_LANDING", () => {
+test("blocks a direct push to the integration branch without LOCALMERGE_LANDING", () => {
   const result = checkPush(parseRefUpdates(refLine("refs/heads/dev")), cfg, {});
   assert.equal(result.ok, false);
-  assert.match(result.message ?? "", /mergequeue land/);
+  assert.match(result.message ?? "", /localmerge land/);
 });
 
-test("allows a push to the integration branch when MERGEQUEUE_LANDING=1", () => {
-  const result = checkPush(parseRefUpdates(refLine("refs/heads/dev")), cfg, { MERGEQUEUE_LANDING: "1" });
+test("allows a push to the integration branch when LOCALMERGE_LANDING=1", () => {
+  const result = checkPush(parseRefUpdates(refLine("refs/heads/dev")), cfg, { LOCALMERGE_LANDING: "1" });
   assert.equal(result.ok, true);
 });
 
@@ -30,18 +30,18 @@ test("blocks a direct push to an explicit protectedBranches entry", () => {
   assert.equal(result.ok, false);
 });
 
-test("allows a push to a protected branch when MERGEQUEUE_EMERGENCY_PUSH=1", () => {
-  const result = checkPush(parseRefUpdates(refLine("refs/heads/main")), cfg, { MERGEQUEUE_EMERGENCY_PUSH: "1" });
+test("allows a push to a protected branch when LOCALMERGE_EMERGENCY_PUSH=1", () => {
+  const result = checkPush(parseRefUpdates(refLine("refs/heads/main")), cfg, { LOCALMERGE_EMERGENCY_PUSH: "1" });
   assert.equal(result.ok, true);
 });
 
-test("allows a push to the integration branch when MERGEQUEUE_EMERGENCY_PUSH=1", () => {
-  const result = checkPush(parseRefUpdates(refLine("refs/heads/dev")), cfg, { MERGEQUEUE_EMERGENCY_PUSH: "1" });
+test("allows a push to the integration branch when LOCALMERGE_EMERGENCY_PUSH=1", () => {
+  const result = checkPush(parseRefUpdates(refLine("refs/heads/dev")), cfg, { LOCALMERGE_EMERGENCY_PUSH: "1" });
   assert.equal(result.ok, true);
 });
 
-test("blocks a protected-branch push when MERGEQUEUE_EMERGENCY_PUSH isn't exactly \"1\"", () => {
-  const result = checkPush(parseRefUpdates(refLine("refs/heads/main")), cfg, { MERGEQUEUE_EMERGENCY_PUSH: "true" });
+test("blocks a protected-branch push when LOCALMERGE_EMERGENCY_PUSH isn't exactly \"1\"", () => {
+  const result = checkPush(parseRefUpdates(refLine("refs/heads/main")), cfg, { LOCALMERGE_EMERGENCY_PUSH: "true" });
   assert.equal(result.ok, false);
 });
 

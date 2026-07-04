@@ -12,7 +12,7 @@ function git(cwd: string, args: string[]): string {
 }
 
 function makeRepoWithRemote(branch = "main"): { dir: string; remote: string } {
-  const base = mkdtempSync(join(tmpdir(), "mergequeue-sync-"));
+  const base = mkdtempSync(join(tmpdir(), "localmerge-sync-"));
   const remote = join(base, "remote.git");
   const dir = join(base, "checkout");
   execFileSync("git", ["init", "--quiet", "--bare", remote]);
@@ -60,7 +60,7 @@ test("sync fast-forwards the main checkout when it's on integrationBranch and be
   const cwd = process.cwd();
   try {
     // A second clone lands a new commit onto origin/main, simulating another lane landing.
-    const other = mkdtempSync(join(tmpdir(), "mergequeue-sync-other-"));
+    const other = mkdtempSync(join(tmpdir(), "localmerge-sync-other-"));
     execFileSync("git", ["clone", "--quiet", remote, other]);
     git(other, ["config", "user.email", "test@test.com"]);
     git(other, ["config", "user.name", "Test"]);
@@ -83,7 +83,7 @@ test("sync fast-forwards the main checkout when it's on integrationBranch and be
 
 test("bare sync() falls back to DEFAULTS when MAIN has no config yet — and can wrongly refuse a real integrationBranch that isn't literally \"main\"", async () => {
   // The exact bootstrap gap: the main checkout doesn't have
-  // mergequeue.config.mjs yet (this push just introduced it, and sync is
+  // localmerge.config.mjs yet (this push just introduced it, and sync is
   // what's supposed to bring it over) — a bare sync() has no way to know
   // the real integrationBranch is "dev", not DEFAULTS' "main".
   const { dir } = makeRepoWithRemote("dev");
@@ -110,7 +110,7 @@ test("sync(providedCfg) uses the caller's already-loaded config instead of re-de
   const { dir, remote } = makeRepoWithRemote("dev");
   const cwd = process.cwd();
   try {
-    const other = mkdtempSync(join(tmpdir(), "mergequeue-sync-other-"));
+    const other = mkdtempSync(join(tmpdir(), "localmerge-sync-other-"));
     execFileSync("git", ["clone", "--quiet", remote, other]);
     git(other, ["config", "user.email", "test@test.com"]);
     git(other, ["config", "user.name", "Test"]);

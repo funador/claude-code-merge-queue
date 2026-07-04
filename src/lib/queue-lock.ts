@@ -73,7 +73,7 @@ function repoKey(): string {
 export function createQueueLock(queueName: string): QueueLock {
   const QUEUE_DIR = join(
     tmpdir(),
-    `mergequeue-${queueName}-queue-${createHash("sha1").update(repoKey()).digest("hex").slice(0, 12)}`,
+    `localmerge-${queueName}-queue-${createHash("sha1").update(repoKey()).digest("hex").slice(0, 12)}`,
   );
   const TICKETS_DIR = join(QUEUE_DIR, "tickets");
   const LOCK_FILE = join(QUEUE_DIR, "lock");

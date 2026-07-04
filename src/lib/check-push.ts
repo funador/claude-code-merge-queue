@@ -7,20 +7,20 @@
  * lines git's pre-push hook always gets on stdin, and rejects a direct push
  * to the integration branch or any protected/production branch by default.
  *
- * `land.ts` sets MERGEQUEUE_LANDING=1 right before its own push — that's
+ * `land.ts` sets LOCALMERGE_LANDING=1 right before its own push — that's
  * the only thing that legitimately unblocks the integration branch on the
  * normal path. `promote.ts` pushes to productionBranch with `--no-verify`,
  * which skips this hook entirely (same as git always does for --no-verify).
  *
  * Every branch here (including the integration branch, which used to have
  * NO override at all) also has a genuine emergency hatch: set
- * MERGEQUEUE_EMERGENCY_PUSH=1 and push. One env var, no prompts, no second
- * factor to remember — the same trust model as MERGEQUEUE_LANDING=1 above
+ * LOCALMERGE_EMERGENCY_PUSH=1 and push. One env var, no prompts, no second
+ * factor to remember — the same trust model as LOCALMERGE_LANDING=1 above
  * it. This is a convention, not a hard guarantee: it stops mistakes and
  * stray pushes, not a truly adversarial agent that sets it itself. Worth
  * knowing, not worth building 18 hoops to (marginally) defend against.
  */
-import type { MergeQueueConfig } from "./config.js";
+import type { LocalMergeConfig } from "./config.js";
 
 export interface RefUpdate {
   localRef: string;
@@ -46,12 +46,12 @@ export function parseRefUpdates(stdin: string): RefUpdate[] {
 }
 
 function emergencyConfirmed(env: NodeJS.ProcessEnv): boolean {
-  return env.MERGEQUEUE_EMERGENCY_PUSH === "1";
+  return env.LOCALMERGE_EMERGENCY_PUSH === "1";
 }
 
 export function checkPush(
   refUpdates: RefUpdate[],
-  cfg: Pick<MergeQueueConfig, "integrationBranch" | "productionBranch" | "protectedBranches">,
+  cfg: Pick<LocalMergeConfig, "integrationBranch" | "productionBranch" | "protectedBranches">,
   env: NodeJS.ProcessEnv,
 ): CheckResult {
   const integrationRef = `refs/heads/${cfg.integrationBranch}`;
@@ -68,19 +68,19 @@ export function checkPush(
           "",
           `✋ Direct pushes to '${branch}' are blocked.`,
           `   This is a protected branch — promote it deliberately, not with a stray push.`,
-          `   Emergency override:  MERGEQUEUE_EMERGENCY_PUSH=1 git push …`,
+          `   Emergency override:  LOCALMERGE_EMERGENCY_PUSH=1 git push …`,
           "",
         ].join("\n"),
       };
     }
-    if (remoteRef === integrationRef && env.MERGEQUEUE_LANDING !== "1" && !emergencyConfirmed(env)) {
+    if (remoteRef === integrationRef && env.LOCALMERGE_LANDING !== "1" && !emergencyConfirmed(env)) {
       return {
         ok: false,
         message: [
           "",
           `✋ Direct pushes to '${cfg.integrationBranch}' are blocked — landing goes through the queue.`,
-          `   Land your work:  mergequeue land`,
-          `   Genuine emergency:  MERGEQUEUE_EMERGENCY_PUSH=1 git push …`,
+          `   Land your work:  localmerge land`,
+          `   Genuine emergency:  LOCALMERGE_EMERGENCY_PUSH=1 git push …`,
           "",
         ].join("\n"),
       };

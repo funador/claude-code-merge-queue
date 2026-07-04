@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="MergeQueue — the local, zero-cost merge queue for parallel Claude Code agents" width="100%" />
+  <img src="assets/banner.svg" alt="LocalMerge — the local, zero-cost merge queue for parallel Claude Code agents" width="100%" />
 </p>
 
 <p align="center">
@@ -9,13 +9,13 @@
   <img alt="Runtime deps" src="https://img.shields.io/badge/runtime%20deps-0-brightgreen.svg">
 </p>
 
-# MergeQueue 🚦
+# LocalMerge 🚦
 
 **The local, zero-cost merge queue for parallel Claude Code agents.**
 
 Claude Code already isolates your agents — `--worktree` (or `isolation:
 "worktree"` on a subagent) gives every session its own git worktree, natively,
-no setup. That part's solved. MergeQueue is the part that comes after: what
+no setup. That part's solved. LocalMerge is the part that comes after: what
 happens when four isolated agents all try to land, build, and test *at the
 same time*.
 
@@ -40,7 +40,7 @@ exactly the wrong moment, and mean nothing by it.
 
 GitHub already ships a merge queue. Two things it costs you that this doesn't:
 
-| | GitHub Merge Queue | MergeQueue |
+| | GitHub Merge Queue | LocalMerge |
 |---|---|---|
 | Private repo | **Enterprise Cloud only** | Any plan, any repo |
 | Cost per landing | GitHub Actions minutes, every queue attempt | $0 — runs on your own machine |
@@ -53,14 +53,14 @@ locally instead of in someone else's billed cloud. 💸
 
 | Command | What it does |
 |---|---|
-| `mergequeue hook worktree-create` | A Claude Code `WorktreeCreate` hook. Plugs MergeQueue's numbered lanes into Claude's *native* worktree creation — doesn't reinvent it. |
-| `mergequeue build-lock -- <cmd>` | Runs `<cmd>` — your build — serialized across every lane, machine-wide. |
-| `mergequeue land` | Rebases and pushes your lane onto the integration branch through a FIFO queue, so two lanes are never mid-push at once. Agents run this themselves — see below. |
-| `mergequeue sync` | Fast-forwards your main checkout so a dev server actually sees what just landed. |
-| `mergequeue promote` | Ships the integration branch to production. **Human-only** — never in an agent's instructions, never automated. |
-| `mergequeue preview` | Instantly mirrors a lane's live working tree — uncommitted changes included — onto the main checkout, so you can look at it without a build. |
-| `mergequeue port` | Prints a lane's dev-server port, derived from its own directory name. |
-| `mergequeue prune` | Removes already-landed sibling lane worktrees on demand — `land` already does this automatically, this is for "clean these up right now" instead of waiting for the next lane to land something. |
+| `localmerge hook worktree-create` | A Claude Code `WorktreeCreate` hook. Plugs LocalMerge's numbered lanes into Claude's *native* worktree creation — doesn't reinvent it. |
+| `localmerge build-lock -- <cmd>` | Runs `<cmd>` — your build — serialized across every lane, machine-wide. |
+| `localmerge land` | Rebases and pushes your lane onto the integration branch through a FIFO queue, so two lanes are never mid-push at once. Agents run this themselves — see below. |
+| `localmerge sync` | Fast-forwards your main checkout so a dev server actually sees what just landed. |
+| `localmerge promote` | Ships the integration branch to production. **Human-only** — never in an agent's instructions, never automated. |
+| `localmerge preview` | Instantly mirrors a lane's live working tree — uncommitted changes included — onto the main checkout, so you can look at it without a build. |
+| `localmerge port` | Prints a lane's dev-server port, derived from its own directory name. |
+| `localmerge prune` | Removes already-landed sibling lane worktrees on demand — `land` already does this automatically, this is for "clean these up right now" instead of waiting for the next lane to land something. |
 
 Plus 🔒 a pre-push hook that makes `land` non-optional: a direct `git push`
 straight to the integration branch gets bounced, full stop. Not a lint
@@ -83,13 +83,13 @@ crashed run's copy needs to clean itself up without anyone noticing it died.
 ## ⚡ Quickstart
 
 ```bash
-npm install --save-dev mergequeue   # or: pnpm add -D / yarn add -D / bun add -d
-npx mergequeue init
+npm install --save-dev localmerge   # or: pnpm add -D / yarn add -D / bun add -d
+npx localmerge init
 ```
 
 This does the whole setup, not just the config file:
 
-- **`mergequeue.config.mjs`** — `integrationBranch` auto-detected from your
+- **`localmerge.config.mjs`** — `integrationBranch` auto-detected from your
   current branch, `checkCommand` auto-detected from package.json
   (`check:push` / `check` / `ci` / `test`, first match wins).
 - **`CLAUDE.md`** (or appends to yours if you already have one) — the part
@@ -113,13 +113,13 @@ package.json), every push is **blocked** until you set one — see 🧰 What's
 in the box above. That's on purpose.
 
 From here on: `claude --worktree <name>` to spin up an isolated lane —
-MergeQueue's hook takes it from there, and CLAUDE.md tells the agent the rest.
-You show up to run `mergequeue promote` when you actually want to ship. 🚀
+LocalMerge's hook takes it from there, and CLAUDE.md tells the agent the rest.
+You show up to run `localmerge promote` when you actually want to ship. 🚀
 
 ## ⚙️ Configuration
 
 Everything lives in one file — see
-[`examples/mergequeue.config.mjs`](examples/mergequeue.config.mjs) for every
+[`examples/localmerge.config.mjs`](examples/localmerge.config.mjs) for every
 field with comments. The short version:
 
 ```js
@@ -150,10 +150,10 @@ in `protectedBranches` — has a real way through it. One env var, no
 prompts, no second factor to remember:
 
 ```bash
-MERGEQUEUE_EMERGENCY_PUSH=1 git push origin HEAD:main
+LOCALMERGE_EMERGENCY_PUSH=1 git push origin HEAD:main
 ```
 
-This is the one place in MergeQueue that's honestly a convention, not a
+This is the one place in LocalMerge that's honestly a convention, not a
 hard guarantee: the env var stops mistakes and stray pushes, not a truly
 adversarial agent that decides to set it itself. Worth knowing, not worth
 pretending isn't true.
@@ -166,7 +166,7 @@ that's a deliberate, named tradeoff, not an oversight.
 - **`checkCommand` gates landing.** Nothing reaches `integrationBranch`
   without passing it. This is the first, and for most changes the *only*,
   correctness check anything gets.
-- **`mergequeue promote` is a release decision, not a code review.**
+- **`localmerge promote` is a release decision, not a code review.**
   Running it means "this batch of already-landed, already-tested work
   should ship now" — not "I read the diff and it looks right." If your own
   CI provider also runs checks against the production branch (most real
@@ -226,7 +226,7 @@ Things a sharp reader should already know before they ask:
   --no-verify`, delete the hook, or edit the config on purpose. If your
   threat model includes an agent actively trying to get around this, none
   of this helps, and nothing local-only ever could.
-- **Guarantees a check ran — not that the check is good.** MergeQueue
+- **Guarantees a check ran — not that the check is good.** LocalMerge
   enforces that `checkCommand` exists and passed. It has no way to know if
   that's a real test suite or `echo ok`. "Tests are the reviewer" is only
   as true as what's actually in them.
@@ -251,11 +251,11 @@ Things a sharp reader should already know before they ask:
   now. That check needs `lsof` on PATH; if it's missing, pruning fails
   closed (treats liveness as unknown, never removes) rather than guessing.
 - **The `WorktreeCreate` hook needs the host project's own real install.**
-  It runs via `npx mergequeue hook worktree-create` (a raw hook command has
+  It runs via `npx localmerge hook worktree-create` (a raw hook command has
   no `node_modules/.bin` on its PATH, unlike an `npm run` script) — but npx
   silently falls back to fetching an ephemeral, unpinned copy when it can't
   resolve the package locally, which is exactly what happens if the host
-  project's own `node_modules` install of mergequeue is missing or
+  project's own `node_modules` install of localmerge is missing or
   mid-upgrade. That's a real failure mode, not hypothetical: it happened in
   production and the fallback ran silently long enough to mask a broken
   install for two lane-landings. The hook now refuses to run at all if it

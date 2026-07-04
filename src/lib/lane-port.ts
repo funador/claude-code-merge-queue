@@ -11,9 +11,9 @@
  * right there in the path.
  */
 import { basename } from "node:path";
-import type { MergeQueueConfig } from "./config.js";
+import type { LocalMergeConfig } from "./config.js";
 
-export function laneNumberFromPath(path: string, cfg: Pick<MergeQueueConfig, "worktreeSuffix">): number | null {
+export function laneNumberFromPath(path: string, cfg: Pick<LocalMergeConfig, "worktreeSuffix">): number | null {
   const name = basename(path);
   const idx = name.lastIndexOf(cfg.worktreeSuffix);
   if (idx === -1) return null;
@@ -21,7 +21,7 @@ export function laneNumberFromPath(path: string, cfg: Pick<MergeQueueConfig, "wo
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
-export function lanePort(path: string, cfg: Pick<MergeQueueConfig, "worktreeSuffix" | "portBase">): number | null {
+export function lanePort(path: string, cfg: Pick<LocalMergeConfig, "worktreeSuffix" | "portBase">): number | null {
   const lane = laneNumberFromPath(path, cfg);
   return lane === null ? null : cfg.portBase + lane;
 }

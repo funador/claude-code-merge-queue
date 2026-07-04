@@ -6,13 +6,13 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const CLI = resolve(fileURLToPath(import.meta.url), "..", "..", "dist", "bin", "mergequeue.js");
+const CLI = resolve(fileURLToPath(import.meta.url), "..", "..", "dist", "bin", "localmerge.js");
 
 function scratchRepoWithConfig(checkCommand: string): string {
-  const dir = mkdtempSync(join(tmpdir(), "mergequeue-checkpush-cli-"));
+  const dir = mkdtempSync(join(tmpdir(), "localmerge-checkpush-cli-"));
   execFileSync("git", ["init", "-q", "-b", "main"], { cwd: dir });
   writeFileSync(
-    join(dir, "mergequeue.config.mjs"),
+    join(dir, "localmerge.config.mjs"),
     `export default { branchPrefix: "lane/", worktreeSuffix: "-lane-", portBase: 3000, integrationBranch: "main", productionBranch: null, protectedBranches: [], regenerableFiles: [], symlinks: [], buildOutputDirs: [], checkCommand: ${JSON.stringify(checkCommand)}, checksRequired: true };\n`,
   );
   return dir;

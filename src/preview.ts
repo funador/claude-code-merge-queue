@@ -14,9 +14,9 @@
  * framework's fingerprints show up is `buildOutputDirs` in your config
  * (never copy someone's stale ".next" or "dist" over a live checkout).
  *
- *   mergequeue preview            from a lane worktree — swap the dev server
+ *   localmerge preview            from a lane worktree — swap the dev server
  *                                 to show THIS lane's current working tree.
- *   mergequeue preview --restore  from anywhere — put the dev server back on
+ *   localmerge preview --restore  from anywhere — put the dev server back on
  *                                 the integration branch's real HEAD.
  *
  * Safety:
@@ -75,11 +75,11 @@ function restore(target: string, manifestPath: string): void {
 
 function preview(source: string, target: string, manifestPath: string, excludes: string[]): void {
   if (source === target) {
-    console.error("mergequeue preview: refusing to run from the dev-server checkout itself — run this from a lane worktree.");
+    console.error("localmerge preview: refusing to run from the dev-server checkout itself — run this from a lane worktree.");
     process.exit(1);
   }
   if (existsSync(manifestPath)) {
-    console.error(`${RED}preview: a preview is already active on the dev server.${RESET} Run 'mergequeue preview --restore' first.`);
+    console.error(`${RED}preview: a preview is already active on the dev server.${RESET} Run 'localmerge preview --restore' first.`);
     process.exit(1);
   }
   const before = gitStatus(target);
@@ -106,20 +106,20 @@ function preview(source: string, target: string, manifestPath: string, excludes:
   writeFileSync(manifestPath, JSON.stringify({ branch, addedPaths } satisfies Manifest, null, 2));
 
   console.log(`${GREEN}✓ dev server now showing ${branch}.${RESET} Refresh the browser.`);
-  console.log(`${DIM}Run 'mergequeue preview --restore' when done.${RESET}`);
+  console.log(`${DIM}Run 'localmerge preview --restore' when done.${RESET}`);
 }
 
 export async function runPreview(args: string[]): Promise<void> {
   const source = process.cwd();
   const target = resolveMainCheckout(source);
-  const manifestPath = join(tmpdir(), `mergequeue-preview-manifest-${createHash("sha1").update(target).digest("hex").slice(0, 12)}.json`);
+  const manifestPath = join(tmpdir(), `localmerge-preview-manifest-${createHash("sha1").update(target).digest("hex").slice(0, 12)}.json`);
 
   // Fail fast and legibly if rsync isn't available, rather than a cryptic
   // spawn ENOENT partway through copying files.
   try {
     execSync("command -v rsync", { stdio: "ignore" });
   } catch {
-    console.error("mergequeue preview: rsync is required and wasn't found on PATH.");
+    console.error("localmerge preview: rsync is required and wasn't found on PATH.");
     process.exit(1);
   }
 
