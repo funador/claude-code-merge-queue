@@ -2,14 +2,14 @@
  * promote.ts — ship the integration branch to production by fast-forwarding
  * origin/<productionBranch> to origin/<integrationBranch>.
  *
- * This is the one command in LaneKeeper that's deliberately NOT part of the
+ * This is the one command in MergeQueue that's deliberately NOT part of the
  * automated workflow. Agents land on `integrationBranch` continuously and
- * autonomously (see the CLAUDE.md workflow section `lanekeeper init` writes) —
+ * autonomously (see the CLAUDE.md workflow section `mergequeue init` writes) —
  * production only moves when a human decides to run this. If your
- * lanekeeper.config has no `productionBranch` set, there's nothing to
+ * mergequeue.config has no `productionBranch` set, there's nothing to
  * promote: `integrationBranch` already IS production, and this is a no-op.
  *
- *   Usage:  lanekeeper promote   (run from anywhere in the repo)
+ *   Usage:  mergequeue promote   (run from anywhere in the repo)
  *
  * Safe by construction:
  *   - Fetches first, then verifies origin/productionBranch is an ANCESTOR of
@@ -38,12 +38,12 @@ function git(args: string[], { allowFail = false } = {}): { ok: boolean; out: st
 
 export async function promote(): Promise<number> {
   if (!hasConfig()) {
-    console.error("lanekeeper promote: no lanekeeper.config found at the repo root.");
+    console.error("mergequeue promote: no mergequeue.config found at the repo root.");
     return 1;
   }
   const cfg = await loadConfig();
   if (!cfg.productionBranch) {
-    console.log(`lanekeeper promote: no productionBranch configured — '${cfg.integrationBranch}' already IS production. Nothing to do.`);
+    console.log(`mergequeue promote: no productionBranch configured — '${cfg.integrationBranch}' already IS production. Nothing to do.`);
     return 0;
   }
   const { integrationBranch, productionBranch } = cfg;
@@ -53,12 +53,12 @@ export async function promote(): Promise<number> {
   const prod = git(["rev-parse", `origin/${productionBranch}`], { allowFail: true });
   const integ = git(["rev-parse", `origin/${integrationBranch}`], { allowFail: true });
   if (!prod.ok || !integ.ok) {
-    console.error(`lanekeeper promote: could not resolve origin/${productionBranch} or origin/${integrationBranch} — are both branches created and fetched?`);
+    console.error(`mergequeue promote: could not resolve origin/${productionBranch} or origin/${integrationBranch} — are both branches created and fetched?`);
     return 1;
   }
 
   if (prod.out === integ.out) {
-    console.log(`lanekeeper promote: ${productionBranch} already at ${integrationBranch} (${integ.out.slice(0, 7)}) — nothing to ship.`);
+    console.log(`mergequeue promote: ${productionBranch} already at ${integrationBranch} (${integ.out.slice(0, 7)}) — nothing to ship.`);
     return 0;
   }
 
@@ -67,7 +67,7 @@ export async function promote(): Promise<number> {
   const ff = git(["merge-base", "--is-ancestor", `origin/${productionBranch}`, `origin/${integrationBranch}`], { allowFail: true });
   if (!ff.ok) {
     console.error(
-      `lanekeeper promote: origin/${productionBranch} has commits NOT on origin/${integrationBranch} — history has diverged.\n` +
+      `mergequeue promote: origin/${productionBranch} has commits NOT on origin/${integrationBranch} — history has diverged.\n` +
         `Someone pushed ${productionBranch} directly. Reconcile manually before promoting.\n` +
         "Left untouched — refusing to force-push production.",
     );
@@ -76,10 +76,10 @@ export async function promote(): Promise<number> {
 
   const push = git(["push", "--no-verify", "origin", `origin/${integrationBranch}:${productionBranch}`], { allowFail: true });
   if (!push.ok) {
-    console.error(`lanekeeper promote: push to ${productionBranch} FAILED — production NOT updated.\n${push.out}`);
+    console.error(`mergequeue promote: push to ${productionBranch} FAILED — production NOT updated.\n${push.out}`);
     return 1;
   }
 
-  console.log(`lanekeeper promote: shipped ${integrationBranch} → ${productionBranch}  ${prod.out.slice(0, 7)} → ${integ.out.slice(0, 7)}`);
+  console.log(`mergequeue promote: shipped ${integrationBranch} → ${productionBranch}  ${prod.out.slice(0, 7)} → ${integ.out.slice(0, 7)}`);
   return 0;
 }

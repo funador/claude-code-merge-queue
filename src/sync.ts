@@ -13,11 +13,11 @@
  *     warns and leaves it untouched — never a force, never a merge commit.
  *   - Retries transient index.lock contention (two lanes landing near-simultaneously).
  *   - If a fast-forward is blocked only by a locally-modified *regenerable*
- *     file (configured in lanekeeper.config), it discards that file and
+ *     file (configured in mergequeue.config), it discards that file and
  *     retries. Any other dirty file → warn and skip.
  */
 import { execFileSync } from "node:child_process";
-import { loadConfig, type LaneKeeperConfig } from "./lib/config.js";
+import { loadConfig, type MergeQueueConfig } from "./lib/config.js";
 import { resolveMainCheckout } from "./lib/main-checkout.js";
 
 const LOCK_RETRIES = 3;
@@ -51,22 +51,22 @@ function sleep(ms: number): void {
  * Fast-forwards the MAIN checkout. Returns a process exit code; never throws.
  *
  * Accepts an already-loaded config, for `land` calling this immediately
- * after a push that ITSELF introduced or changed lanekeeper.config.mjs: the
+ * after a push that ITSELF introduced or changed mergequeue.config.mjs: the
  * MAIN checkout hasn't been fast-forwarded yet at that exact moment (that's
  * this function's whole job), so loading fresh from MAIN would silently
  * fall back to DEFAULTS and could reject a perfectly good sync — the same
  * bootstrap gap createLane had to be fixed for. The lane's own config,
  * which just successfully rebased onto and pushed to the real
  * integrationBranch, is the more trustworthy answer at that moment. A bare
- * `lanekeeper sync` (no caller-provided config) still loads fresh from
+ * `mergequeue sync` (no caller-provided config) still loads fresh from
  * MAIN, same as before.
  */
-export async function sync(providedCfg?: LaneKeeperConfig): Promise<number> {
+export async function sync(providedCfg?: MergeQueueConfig): Promise<number> {
   let MAIN: string;
   try {
     MAIN = resolveMainCheckout(process.cwd());
   } catch {
-    console.error("lanekeeper sync: not inside a git repo — nothing to do.");
+    console.error("mergequeue sync: not inside a git repo — nothing to do.");
     return 0;
   }
 
@@ -76,7 +76,7 @@ export async function sync(providedCfg?: LaneKeeperConfig): Promise<number> {
   const branchRes = git(MAIN, ["rev-parse", "--abbrev-ref", "HEAD"], { allowFail: true });
   const branch = branchRes.out.trim();
   if (!branch || branch === "HEAD") {
-    console.error("lanekeeper sync: the checkout is detached or unresolved — left untouched.");
+    console.error("mergequeue sync: the checkout is detached or unresolved — left untouched.");
     return 0;
   }
   // The main checkout is meant to stay parked on integrationBranch permanently
@@ -87,7 +87,7 @@ export async function sync(providedCfg?: LaneKeeperConfig): Promise<number> {
   // thing. Say so plainly instead of surfacing a raw git error later.
   if (branch !== cfg.integrationBranch) {
     console.error(
-      `lanekeeper sync: this checkout is on '${branch}', not the configured integrationBranch ` +
+      `mergequeue sync: this checkout is on '${branch}', not the configured integrationBranch ` +
         `('${cfg.integrationBranch}'). sync only fast-forwards the main checkout — run it from ` +
         `there, or check out '${cfg.integrationBranch}' here first. Left untouched.`,
     );
@@ -120,7 +120,7 @@ export async function sync(providedCfg?: LaneKeeperConfig): Promise<number> {
       git(MAIN, ["checkout", "--", ...files], { allowFail: true });
       res = tryFastForward();
     } else {
-      console.error(`lanekeeper sync: ${branch} has local changes blocking fast-forward (${blocking.join(", ")}). Left untouched — resolve in the checkout.`);
+      console.error(`mergequeue sync: ${branch} has local changes blocking fast-forward (${blocking.join(", ")}). Left untouched — resolve in the checkout.`);
       return 0;
     }
   }
@@ -128,18 +128,18 @@ export async function sync(providedCfg?: LaneKeeperConfig): Promise<number> {
   if (res.ok) {
     const after = git(MAIN, ["rev-parse", "--short", "HEAD"], { allowFail: true }).out.trim();
     if (before === after) {
-      console.log(`lanekeeper sync: ${branch} already current at ${after}.`);
+      console.log(`mergequeue sync: ${branch} already current at ${after}.`);
     } else {
-      console.log(`lanekeeper sync: fast-forwarded ${branch} ${before} → ${after} — the dev server will pick it up.`);
+      console.log(`mergequeue sync: fast-forwarded ${branch} ${before} → ${after} — the dev server will pick it up.`);
     }
     return 0;
   }
 
   if (/Not possible to fast-forward|diverging|non-fast-forward/i.test(res.out)) {
-    console.error(`lanekeeper sync: local ${branch} has DIVERGED from ${upstream} (something was committed directly on the checkout). Left untouched — reconcile it manually.`);
+    console.error(`mergequeue sync: local ${branch} has DIVERGED from ${upstream} (something was committed directly on the checkout). Left untouched — reconcile it manually.`);
     return 0;
   }
 
-  console.error(`lanekeeper sync: could not fast-forward ${branch} — left untouched.\n${res.out.trim()}`);
+  console.error(`mergequeue sync: could not fast-forward ${branch} — left untouched.\n${res.out.trim()}`);
   return 0;
 }

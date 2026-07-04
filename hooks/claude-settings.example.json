@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npx lanekeeper hook worktree-create"
+            "command": "npx mergequeue hook worktree-create"
           }
         ]
       }

@@ -1,14 +1,14 @@
 {
-  "name": "lanekeeper",
+  "name": "mergequeue",
   "version": "0.1.9",
   "description": "The local, zero-cost merge queue for parallel Claude Code agents. Plugs into Claude Code's native worktree isolation; one build at a time, one landing at a time, zero races.",
   "type": "module",
   "license": "MIT",
   "author": "Jesse Heaslip",
-  "homepage": "https://github.com/funador/lanekeeper",
+  "homepage": "https://github.com/funador/mergequeue",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/funador/lanekeeper.git"
+    "url": "git+https://github.com/funador/mergequeue.git"
   },
   "keywords": [
     "claude-code",
@@ -20,7 +20,7 @@
     "monorepo-tooling"
   ],
   "bin": {
-    "lanekeeper": "dist/bin/lanekeeper.js"
+    "mergequeue": "dist/bin/mergequeue.js"
   },
   "files": [
     "dist",
@@ -33,7 +33,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && chmod +x dist/bin/lanekeeper.js",
+    "build": "tsc -p tsconfig.json && chmod +x dist/bin/mergequeue.js",
     "prepare": "npm run build",
     "pretest": "npm run build",
     "test": "node --import tsx --test test/*.test.ts"

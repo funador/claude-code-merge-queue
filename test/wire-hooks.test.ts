@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { wireClaudeSettings, wireHuskyPrePush, ensureHooksPath, wirePackageJsonScripts } from "../src/lib/wire-hooks.js";
 
 function scratchDir(): string {
-  return mkdtempSync(join(tmpdir(), "lanekeeper-wire-"));
+  return mkdtempSync(join(tmpdir(), "mergequeue-wire-"));
 }
 
 function scratchGitRepo(): string {
@@ -21,7 +21,7 @@ test("wireClaudeSettings creates .claude/settings.json from scratch", () => {
   try {
     assert.equal(wireClaudeSettings(dir), "created");
     const written = JSON.parse(readFileSync(join(dir, ".claude", "settings.json"), "utf8"));
-    assert.equal(written.hooks.WorktreeCreate[0].hooks[0].command, "npx lanekeeper hook worktree-create");
+    assert.equal(written.hooks.WorktreeCreate[0].hooks[0].command, "npx mergequeue hook worktree-create");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -38,7 +38,7 @@ test("wireClaudeSettings merges into an existing settings.json without dropping 
     assert.equal(wireClaudeSettings(dir), "merged");
     const written = JSON.parse(readFileSync(join(dir, ".claude", "settings.json"), "utf8"));
     assert.equal(written.hooks.PreToolUse[0].hooks[0].command, "echo hi", "existing hook must survive");
-    assert.equal(written.hooks.WorktreeCreate[0].hooks[0].command, "npx lanekeeper hook worktree-create");
+    assert.equal(written.hooks.WorktreeCreate[0].hooks[0].command, "npx mergequeue hook worktree-create");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -81,7 +81,7 @@ test("wireHuskyPrePush creates pre-push when .husky exists but the hook doesn't"
   try {
     mkdirSync(join(dir, ".husky"));
     assert.equal(wireHuskyPrePush(dir), "created");
-    assert.match(readFileSync(join(dir, ".husky", "pre-push"), "utf8"), /lanekeeper check-push/);
+    assert.match(readFileSync(join(dir, ".husky", "pre-push"), "utf8"), /mergequeue check-push/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -95,7 +95,7 @@ test("wireHuskyPrePush appends to an existing custom pre-push without dropping i
     assert.equal(wireHuskyPrePush(dir), "merged");
     const content = readFileSync(join(dir, ".husky", "pre-push"), "utf8");
     assert.match(content, /echo custom logic/);
-    assert.match(content, /lanekeeper check-push/);
+    assert.match(content, /mergequeue check-push/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -176,11 +176,11 @@ test("wirePackageJsonScripts adds all five scripts to a fresh package.json", () 
     assert.equal(result, "added");
     assert.deepEqual(added.sort(), ["land", "preview", "preview:restore", "promote", "sync"].sort());
     const written = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
-    assert.equal(written.scripts.land, "lanekeeper land");
-    assert.equal(written.scripts.sync, "lanekeeper sync");
-    assert.equal(written.scripts.promote, "lanekeeper promote");
-    assert.equal(written.scripts.preview, "lanekeeper preview");
-    assert.equal(written.scripts["preview:restore"], "lanekeeper preview --restore");
+    assert.equal(written.scripts.land, "mergequeue land");
+    assert.equal(written.scripts.sync, "mergequeue sync");
+    assert.equal(written.scripts.promote, "mergequeue promote");
+    assert.equal(written.scripts.preview, "mergequeue preview");
+    assert.equal(written.scripts["preview:restore"], "mergequeue preview --restore");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -189,13 +189,13 @@ test("wirePackageJsonScripts adds all five scripts to a fresh package.json", () 
 test("wirePackageJsonScripts never overwrites a script you've already customized", () => {
   const dir = scratchDir();
   try {
-    writeFileSync(join(dir, "package.json"), JSON.stringify({ scripts: { land: "npm run lint && lanekeeper land" } }));
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ scripts: { land: "npm run lint && mergequeue land" } }));
     const { result, added } = wirePackageJsonScripts(dir);
     assert.equal(result, "added");
     assert.ok(!added.includes("land"), "must not report an already-customized script as added");
     assert.deepEqual(added.sort(), ["preview", "preview:restore", "promote", "sync"].sort());
     const written = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
-    assert.equal(written.scripts.land, "npm run lint && lanekeeper land", "custom script must survive untouched");
+    assert.equal(written.scripts.land, "npm run lint && mergequeue land", "custom script must survive untouched");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

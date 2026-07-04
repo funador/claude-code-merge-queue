@@ -1,14 +1,14 @@
 /**
- * lanekeeper.config.ts (or .js — plain JS is fine too) is the only thing
+ * mergequeue.config.ts (or .js — plain JS is fine too) is the only thing
  * that changes between repos. Every command in here reads its knobs from
  * here instead of hardcoding a branch name, a repo name, or a command —
  * that's the difference between "a tool we wrote for one repo" and "a tool
  * anyone can point at theirs."
  *
- * `lanekeeper init` writes a starter config into the repo you run it from.
+ * `mergequeue init` writes a starter config into the repo you run it from.
  * Worktree isolation itself is Claude Code's job now (native `--worktree` /
  * `isolation: worktree`) — this config is read by the WorktreeCreate hook
- * that plugs LaneKeeper's lane numbering into that, and by everything
+ * that plugs MergeQueue's lane numbering into that, and by everything
  * downstream of it (the build queue, the landing queue, preview).
  */
 import { existsSync } from "node:fs";
@@ -16,21 +16,21 @@ import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-export interface LaneKeeperConfig {
+export interface MergeQueueConfig {
   /** Lane branches are named "<branchPrefix><n>" — lane/1, lane/2, ... */
   branchPrefix: string;
   /** Sibling worktree dirs are named "<repo><worktreeSuffix><n>" — ../myapp-lane-1. */
   worktreeSuffix: string;
   /** First lane's dev-server port. Lane n gets portBase + n. */
   portBase: number;
-  /** The shared branch `lanekeeper land` rebases onto and pushes to. */
+  /** The shared branch `mergequeue land` rebases onto and pushes to. */
   integrationBranch: string;
   /**
    * The production branch, if you run a two-stage model (agents land on
    * `integrationBranch`; a human promotes that to `productionBranch` on
-   * their own schedule via `lanekeeper promote`). `null` means
+   * their own schedule via `mergequeue promote`). `null` means
    * `integrationBranch` IS production — no separate promotion step, and
-   * `lanekeeper promote` is a no-op. When set, this branch is automatically
+   * `mergequeue promote` is a no-op. When set, this branch is automatically
    * protected by the pre-push hook — you don't need to also list it in
    * `protectedBranches`.
    */
@@ -65,7 +65,7 @@ export interface LaneKeeperConfig {
    */
   buildOutputDirs: string[];
   /**
-   * The command `lanekeeper check-push` runs (in addition to the branch
+   * The command `mergequeue check-push` runs (in addition to the branch
    * protections) before a landing is allowed through — your lint/typecheck/
    * test/build, whatever "green" means for this repo. `null` means nothing
    * runs. That's a real, dangerous state for a tool whose whole pitch is
@@ -84,7 +84,7 @@ export interface LaneKeeperConfig {
   checksRequired: boolean;
 }
 
-export const DEFAULTS: LaneKeeperConfig = {
+export const DEFAULTS: MergeQueueConfig = {
   branchPrefix: "lane/",
   worktreeSuffix: "-lane-",
   portBase: 3000,
@@ -103,7 +103,7 @@ export const DEFAULTS: LaneKeeperConfig = {
  * commands later. Returns a list of human-readable problems — empty means
  * valid.
  */
-export function validateConfig(cfg: LaneKeeperConfig): string[] {
+export function validateConfig(cfg: MergeQueueConfig): string[] {
   const problems: string[] = [];
   const nonEmptyString = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0;
 
@@ -122,7 +122,7 @@ export function validateConfig(cfg: LaneKeeperConfig): string[] {
   if (!Array.isArray(cfg.protectedBranches) || !cfg.protectedBranches.every(nonEmptyString)) {
     problems.push("protectedBranches must be an array of non-empty strings.");
   } else if (cfg.protectedBranches.includes(cfg.integrationBranch)) {
-    problems.push("protectedBranches contains integrationBranch — that branch is where lanekeeper land pushes; it can't also be blocked.");
+    problems.push("protectedBranches contains integrationBranch — that branch is where mergequeue land pushes; it can't also be blocked.");
   }
   if (!Array.isArray(cfg.regenerableFiles) || !cfg.regenerableFiles.every((v) => typeof v === "string")) {
     problems.push("regenerableFiles must be an array of strings.");
@@ -175,7 +175,7 @@ export function findRepoRoot(cwd: string = process.cwd()): string | null {
 }
 
 function candidatePaths(root: string): string[] {
-  return [join(root, "lanekeeper.config.mjs"), join(root, "lanekeeper.config.js")];
+  return [join(root, "mergequeue.config.mjs"), join(root, "mergequeue.config.js")];
 }
 
 export function configPath(cwd: string = process.cwd()): string | null {
@@ -189,18 +189,18 @@ export function hasConfig(cwd: string = process.cwd()): boolean {
 }
 
 /**
- * Load lanekeeper.config.(m)js from the current repo, merged over DEFAULTS.
+ * Load mergequeue.config.(m)js from the current repo, merged over DEFAULTS.
  * Throws with every problem listed if the merged config is invalid — a
  * config that's silently wrong is worse than a command that refuses to run.
  */
-export async function loadConfig(cwd: string = process.cwd()): Promise<LaneKeeperConfig> {
+export async function loadConfig(cwd: string = process.cwd()): Promise<MergeQueueConfig> {
   const p = configPath(cwd);
   if (!p) return { ...DEFAULTS };
-  const mod = (await import(pathToFileURL(p).href)) as { default?: Partial<LaneKeeperConfig> };
+  const mod = (await import(pathToFileURL(p).href)) as { default?: Partial<MergeQueueConfig> };
   const cfg = { ...DEFAULTS, ...(mod.default ?? {}) };
   const problems = validateConfig(cfg);
   if (problems.length > 0) {
-    throw new Error(`Invalid lanekeeper.config at ${p}:\n${problems.map((p2) => `  - ${p2}`).join("\n")}`);
+    throw new Error(`Invalid mergequeue.config at ${p}:\n${problems.map((p2) => `  - ${p2}`).join("\n")}`);
   }
   return cfg;
 }

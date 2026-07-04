@@ -12,7 +12,7 @@ function git(cwd: string, args: string[]): string {
 }
 
 function makeRepoWithRemote(): { mainTop: string; remote: string } {
-  const base = mkdtempSync(join(tmpdir(), "lanekeeper-prune-"));
+  const base = mkdtempSync(join(tmpdir(), "mergequeue-prune-"));
   const remote = join(base, "remote.git");
   const mainTop = join(base, "main");
   execFileSync("git", ["init", "--quiet", "--bare", remote]);

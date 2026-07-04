@@ -7,7 +7,7 @@
  * make builds faster — it makes them take turns, via the same cross-worktree
  * FIFO lock everything else in this repo shares (queue-lock.ts).
  *
- *   Usage:  lanekeeper build-lock -- <shell command>
+ *   Usage:  mergequeue build-lock -- <shell command>
  *
  * Crash-safe with no timeouts: a lock whose holder PID has died is reclaimed
  * deterministically, so a killed build can't wedge the queue for anyone
@@ -22,7 +22,7 @@ import { createQueueLock } from "./lib/queue-lock.js";
 export async function buildLock(commandParts: string[]): Promise<void> {
   const command = commandParts.join(" ").trim();
   if (!command) {
-    console.error("lanekeeper build-lock: no command given. Usage: lanekeeper build-lock -- <command>");
+    console.error("mergequeue build-lock: no command given. Usage: mergequeue build-lock -- <command>");
     process.exit(2);
   }
 
@@ -66,7 +66,7 @@ export async function buildLock(commandParts: string[]): Promise<void> {
     }
   });
   child.on("error", (err) => {
-    console.error(`lanekeeper build-lock: failed to start command: ${err.message}`);
+    console.error(`mergequeue build-lock: failed to start command: ${err.message}`);
     lock.release();
     process.exit(1);
   });

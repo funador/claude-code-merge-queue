@@ -14,15 +14,15 @@ import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const HOOK_COMMAND = "npx lanekeeper hook worktree-create";
-const PRE_PUSH_MARKER = "lanekeeper check-push";
+const HOOK_COMMAND = "npx mergequeue hook worktree-create";
+const PRE_PUSH_MARKER = "mergequeue check-push";
 
 const PACKAGE_SCRIPTS: Record<string, string> = {
-  land: "lanekeeper land",
-  sync: "lanekeeper sync",
-  promote: "lanekeeper promote",
-  preview: "lanekeeper preview",
-  "preview:restore": "lanekeeper preview --restore",
+  land: "mergequeue land",
+  sync: "mergequeue sync",
+  promote: "mergequeue promote",
+  preview: "mergequeue preview",
+  "preview:restore": "mergequeue preview --restore",
 };
 
 export type WireResult = "created" | "merged" | "already-wired" | "unparseable" | "no-husky";
@@ -105,7 +105,7 @@ export function wireHuskyPrePush(root: string): WireResult {
   const existing = readFileSync(path, "utf8");
   if (existing.includes(PRE_PUSH_MARKER)) return "already-wired";
 
-  const marker = "# --- LaneKeeper (appended by `lanekeeper init`) — see node_modules/lanekeeper/hooks/pre-push for the full comments ---";
+  const marker = "# --- MergeQueue (appended by `mergequeue init`) — see node_modules/mergequeue/hooks/pre-push for the full comments ---";
   appendFileSync(path, `\n${marker}\n${functionalSnippet(template)}`);
   chmodSync(path, 0o755);
   return "merged";
@@ -120,7 +120,7 @@ export type HooksPathResult = "set" | "already-set" | "custom-path";
  * (husky's own `prepare` script). On a freshly cloned repo where nobody's
  * run that install yet — the exact state Quickstart leaves you in right
  * after `init` — the file is silently inert and a direct push sails through
- * uncontested. Since LaneKeeper is the one promising "pushes are gated now,"
+ * uncontested. Since MergeQueue is the one promising "pushes are gated now,"
  * it sets this itself instead of depending on a step that may not have
  * happened yet, mirroring exactly what `husky install` itself does.
  *
