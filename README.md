@@ -11,6 +11,29 @@
 
 # Claude Code Local Merge 🚦
 
+Claude Code already isolates your agents — `--worktree` (or `isolation:
+"worktree"` on a subagent) gives every session its own git worktree, natively,
+no setup. That part's solved. Claude Code Local Merge is the part that comes after: what
+happens when four isolated agents all try to land, build, and test *at the
+same time*.
+
+- 🏁 Everyone pushes to the same branch, someone loses the race, and the
+  rejected push turns into a rebase, which sometimes turns into *another*
+  rejected push.
+- 🔥 A full build is heavy. Four of them running at once turn your laptop
+  into a space heater.
+- 🎲 If your tests hit a shared database, concurrent runs race each other's
+  resets. The failures look flaky. They are not flaky. They're just honest.
+
+None of that is a skill issue. It's what happens when several fast,
+confident processes share one mutable thing with no traffic control.
+
+Telling the agents to "please coordinate" doesn't fix it. An agent (or a
+teammate in a hurry) will violate a documented convention exactly once, at
+exactly the wrong moment, and mean nothing by it.
+
+**So don't ask nicely. Make the collision impossible.** 🚦
+
 **The local, zero-cost merge queue for parallel Claude Code agents.**
 
 ## ⚡ Quickstart
@@ -58,29 +81,6 @@ in the box below. That's on purpose.
 From here on: `claude --worktree <name>` to spin up an isolated lane —
 Claude Code Local Merge's hook takes it from there, and CLAUDE.md tells the agent the rest.
 You show up to run `claude-code-local-merge promote` when you actually want to ship. 🚀
-
-Claude Code already isolates your agents — `--worktree` (or `isolation:
-"worktree"` on a subagent) gives every session its own git worktree, natively,
-no setup. That part's solved. Claude Code Local Merge is the part that comes after: what
-happens when four isolated agents all try to land, build, and test *at the
-same time*.
-
-- 🏁 Everyone pushes to the same branch, someone loses the race, and the
-  rejected push turns into a rebase, which sometimes turns into *another*
-  rejected push.
-- 🔥 A full build is heavy. Four of them running at once turn your laptop
-  into a space heater.
-- 🎲 If your tests hit a shared database, concurrent runs race each other's
-  resets. The failures look flaky. They are not flaky. They're just honest.
-
-None of that is a skill issue. It's what happens when several fast,
-confident processes share one mutable thing with no traffic control.
-
-Telling the agents to "please coordinate" doesn't fix it. An agent (or a
-teammate in a hurry) will violate a documented convention exactly once, at
-exactly the wrong moment, and mean nothing by it.
-
-**So don't ask nicely. Make the collision impossible.** 🚦
 
 ## 🆚 vs. GitHub's Merge Queue
 
