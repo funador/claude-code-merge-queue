@@ -58,7 +58,7 @@ test("init wires land/sync/promote/preview scripts into package.json end-to-end,
   writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "x", scripts: { test: "echo ok" } }));
   try {
     const out = runInit(dir);
-    assert.match(out, /added "land", "sync", "promote", "preview", "preview:restore" to package\.json scripts/);
+    assert.match(out, /added "land", "sync", "promote", "preview", "preview:restore", "preland", "presync" to package\.json scripts/);
     const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
     assert.equal(pkg.scripts.test, "echo ok", "pre-existing script must survive");
     assert.equal(pkg.scripts.land, "localmerge land");
@@ -66,6 +66,8 @@ test("init wires land/sync/promote/preview scripts into package.json end-to-end,
     assert.equal(pkg.scripts.promote, "localmerge promote");
     assert.equal(pkg.scripts.preview, "localmerge preview");
     assert.equal(pkg.scripts["preview:restore"], "localmerge preview --restore");
+    assert.equal(pkg.scripts.preland, "node localmerge-preflight.mjs land");
+    assert.equal(pkg.scripts.presync, "node localmerge-preflight.mjs sync");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

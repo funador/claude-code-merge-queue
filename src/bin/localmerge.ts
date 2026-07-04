@@ -16,7 +16,7 @@ import { runWorktreeCreateHook } from "../hooks/worktree-create.js";
 import { lanePort } from "../lib/lane-port.js";
 import { claudeMdSnippet, MARKER } from "../lib/claude-md-snippet.js";
 import { detectCheckCommand, runCheckCommand } from "../lib/check-command.js";
-import { wireClaudeSettings, wireHuskyPrePush, ensureHooksPath, wirePackageJsonScripts } from "../lib/wire-hooks.js";
+import { wireClaudeSettings, wireHuskyPrePush, ensureHooksPath, wirePackageJsonScripts, wirePreflightScript, PREFLIGHT_FILENAME } from "../lib/wire-hooks.js";
 import { resolveMainCheckout } from "../lib/main-checkout.js";
 import { pruneLandedLanes } from "../lib/prune-lanes.js";
 
@@ -154,6 +154,15 @@ export default ${JSON.stringify(generated, null, 2)};
     }
   }
 
+  switch (wirePreflightScript(root, cfg.integrationBranch)) {
+    case "created":
+      console.log(`localmerge init: wrote ${PREFLIGHT_FILENAME} (a self-contained pre-check "land"/"sync" run before landing — see comments in the file).`);
+      writtenFiles.push(PREFLIGHT_FILENAME);
+      break;
+    case "already-exists":
+      break; // don't overwrite — re-run init after changing integrationBranch if it needs updating
+  }
+
   const scriptsResult = wirePackageJsonScripts(root);
   switch (scriptsResult.result) {
     case "added":
@@ -165,7 +174,8 @@ export default ${JSON.stringify(generated, null, 2)};
       break;
     case "no-package-json":
       console.log("localmerge init: no package.json found — scripts NOT wired automatically.");
-      console.log('  Add "land"/"sync"/"promote"/"preview"/"preview:restore" -> "localmerge <name>" yourself.');
+      console.log('  Add "land"/"sync"/"promote"/"preview"/"preview:restore" -> "localmerge <name>", plus');
+      console.log(`  "preland"/"presync" -> "node ${PREFLIGHT_FILENAME} land"/"sync" yourself.`);
       break;
     case "unparseable":
       console.log("localmerge init: package.json exists but isn't valid JSON — left untouched. Wire the scripts manually.");

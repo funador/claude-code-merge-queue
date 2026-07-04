@@ -104,6 +104,16 @@ This does the whole setup, not just the config file:
   the untracked, not-shared-with-your-team `.git/hooks/pre-push`.
 - **`package.json` scripts** — `land`, `sync`, `promote`, `preview`, and
   `preview:restore` added, skipping any you've already defined yourself.
+- **`localmerge-preflight.mjs`** + `preland`/`presync` scripts — a
+  self-contained safety net npm runs automatically before `land`/`sync`. If
+  this tool's own name/bin ever changes again (it has once — `lanekeeper` →
+  `localmerge`) and a lane hasn't rebased past that point yet, its
+  `package.json` still calls the old name, which no longer exists — a bare,
+  confusing `sh: lanekeeper: command not found`. This script catches that
+  case with an actual diagnosis ("this branch is stale relative to
+  origin/&lt;branch&gt; — rebase first") instead. It's deliberately plain
+  JS with zero dependency on `localmerge` itself, so it keeps working across
+  future renames too.
 
 **Commit everything it wrote**, then you're running. Two steps, not a setup
 guide.

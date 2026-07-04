@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { wireClaudeSettings, wireHuskyPrePush, ensureHooksPath, wirePackageJsonScripts } from "../src/lib/wire-hooks.js";
+import { wireClaudeSettings, wireHuskyPrePush, ensureHooksPath, wirePackageJsonScripts, wirePreflightScript, preflightScriptContent, PREFLIGHT_FILENAME } from "../src/lib/wire-hooks.js";
 
 function scratchDir(): string {
   return mkdtempSync(join(tmpdir(), "localmerge-wire-"));
@@ -168,19 +168,21 @@ test("ensureHooksPath leaves a deliberate custom hooksPath alone", () => {
   }
 });
 
-test("wirePackageJsonScripts adds all five scripts to a fresh package.json", () => {
+test("wirePackageJsonScripts adds all seven scripts to a fresh package.json", () => {
   const dir = scratchDir();
   try {
     writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "x" }));
     const { result, added } = wirePackageJsonScripts(dir);
     assert.equal(result, "added");
-    assert.deepEqual(added.sort(), ["land", "preview", "preview:restore", "promote", "sync"].sort());
+    assert.deepEqual(added.sort(), ["land", "preland", "presync", "preview", "preview:restore", "promote", "sync"].sort());
     const written = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
     assert.equal(written.scripts.land, "localmerge land");
     assert.equal(written.scripts.sync, "localmerge sync");
     assert.equal(written.scripts.promote, "localmerge promote");
     assert.equal(written.scripts.preview, "localmerge preview");
     assert.equal(written.scripts["preview:restore"], "localmerge preview --restore");
+    assert.equal(written.scripts.preland, `node ${PREFLIGHT_FILENAME} land`);
+    assert.equal(written.scripts.presync, `node ${PREFLIGHT_FILENAME} sync`);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -193,7 +195,7 @@ test("wirePackageJsonScripts never overwrites a script you've already customized
     const { result, added } = wirePackageJsonScripts(dir);
     assert.equal(result, "added");
     assert.ok(!added.includes("land"), "must not report an already-customized script as added");
-    assert.deepEqual(added.sort(), ["preview", "preview:restore", "promote", "sync"].sort());
+    assert.deepEqual(added.sort(), ["preland", "presync", "preview", "preview:restore", "promote", "sync"].sort());
     const written = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
     assert.equal(written.scripts.land, "npm run lint && localmerge land", "custom script must survive untouched");
   } finally {
@@ -227,6 +229,68 @@ test("wirePackageJsonScripts leaves unparseable package.json untouched", () => {
     writeFileSync(join(dir, "package.json"), "{ not valid json");
     assert.deepEqual(wirePackageJsonScripts(dir), { result: "unparseable", added: [] });
     assert.equal(readFileSync(join(dir, "package.json"), "utf8"), "{ not valid json");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("preflightScriptContent embeds the given integration branch, not a hardcoded one", () => {
+  const content = preflightScriptContent("dev");
+  assert.match(content, /INTEGRATION_BRANCH = "dev"/);
+  assert.doesNotMatch(content, /\brequire\(.localmerge.\)|from "localmerge"/, "must never import the tool it's protecting against a rename of");
+});
+
+test("wirePreflightScript writes the file once and never overwrites it on a second run", () => {
+  const dir = scratchDir();
+  try {
+    assert.equal(wirePreflightScript(dir, "dev"), "created");
+    assert.ok(existsSync(join(dir, PREFLIGHT_FILENAME)));
+    writeFileSync(join(dir, PREFLIGHT_FILENAME), "// hand-customized\n");
+    assert.equal(wirePreflightScript(dir, "dev"), "already-exists");
+    assert.equal(readFileSync(join(dir, PREFLIGHT_FILENAME), "utf8"), "// hand-customized\n");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the generated preflight script is a silent no-op when the target script's binary actually resolves", () => {
+  const dir = scratchDir();
+  try {
+    wirePreflightScript(dir, "dev");
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ scripts: { land: "node --version" } }));
+    const result = execFileSync("node", [PREFLIGHT_FILENAME, "land"], { cwd: dir, encoding: "utf8" });
+    assert.equal(result, "");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the generated preflight script exits 0 when the target script isn't defined at all", () => {
+  const dir = scratchDir();
+  try {
+    wirePreflightScript(dir, "dev");
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ scripts: {} }));
+    const result = execFileSync("node", [PREFLIGHT_FILENAME, "land"], { cwd: dir, encoding: "utf8" });
+    assert.equal(result, "");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the generated preflight script fails loud with an actionable rebase hint when the target script's binary doesn't resolve — the exact lanekeeper->localmerge failure mode", () => {
+  const dir = scratchDir();
+  try {
+    wirePreflightScript(dir, "dev");
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ scripts: { land: "totally-nonexistent-binary land" } }));
+    try {
+      execFileSync("node", [PREFLIGHT_FILENAME, "land"], { cwd: dir, encoding: "utf8", stdio: "pipe" });
+      assert.fail("expected a non-zero exit");
+    } catch (e) {
+      const err = e as { status: number; stderr: string };
+      assert.equal(err.status, 1);
+      assert.match(err.stderr, /'totally-nonexistent-binary' isn't resolvable/);
+      assert.match(err.stderr, /git fetch origin dev && git rebase origin\/dev/);
+    }
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
