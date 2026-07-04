@@ -11,6 +11,52 @@
 
 # LocalMerge 🚦
 
+## ⚡ Quickstart
+
+```bash
+npm install --save-dev localmerge   # or: pnpm add -D / yarn add -D / bun add -d
+npx localmerge init
+```
+
+This does the whole setup, not just the config file:
+
+- **`localmerge.config.mjs`** — `integrationBranch` auto-detected from your
+  current branch, `checkCommand` auto-detected from package.json
+  (`check:push` / `check` / `ci` / `test`, first match wins).
+- **`CLAUDE.md`** (or appends to yours if you already have one) — the part
+  that makes the whole thing hands-off. Claude Code reads it automatically,
+  every session, and it tells the agent to land its own work once green,
+  without being asked. See "The hands-off part" below.
+- **`.claude/settings.json`** — the `WorktreeCreate` hook wired in (created,
+  or merged into your existing settings without touching anything else
+  already there).
+- **`.husky/pre-push`** — created or appended to, *if* you already have
+  Husky. If you don't, `init` tells you so instead of silently writing to
+  the untracked, not-shared-with-your-team `.git/hooks/pre-push`.
+- **`package.json` scripts** — `land`, `sync`, `promote`, `preview`, and
+  `preview:restore` added, skipping any you've already defined yourself.
+- **`localmerge-preflight.mjs`** + `preland`/`presync` scripts — a
+  self-contained safety net npm runs automatically before `land`/`sync`. If
+  this tool's own name/bin ever changes again (it has once — `lanekeeper` →
+  `localmerge`) and a lane hasn't rebased past that point yet, its
+  `package.json` still calls the old name, which no longer exists — a bare,
+  confusing `sh: lanekeeper: command not found`. This script catches that
+  case with an actual diagnosis ("this branch is stale relative to
+  origin/&lt;branch&gt; — rebase first") instead. It's deliberately plain
+  JS with zero dependency on `localmerge` itself, so it keeps working across
+  future renames too.
+
+**Commit everything it wrote**, then you're running. Two steps, not a setup
+guide.
+
+If `init` couldn't detect a `checkCommand` (no matching script in
+package.json), every push is **blocked** until you set one — see 🧰 What's
+in the box below. That's on purpose.
+
+From here on: `claude --worktree <name>` to spin up an isolated lane —
+LocalMerge's hook takes it from there, and CLAUDE.md tells the agent the rest.
+You show up to run `localmerge promote` when you actually want to ship. 🚀
+
 **The local, zero-cost merge queue for parallel Claude Code agents.**
 
 Claude Code already isolates your agents — `--worktree` (or `isolation:
@@ -79,52 +125,6 @@ And 🧪 a documented extension point (`src/lib/ephemeral.ts` +
 skips: if your tests hit a shared resource — a database, a queue, anything
 stateful — concurrent lanes need their own throwaway copy of it, and a
 crashed run's copy needs to clean itself up without anyone noticing it died.
-
-## ⚡ Quickstart
-
-```bash
-npm install --save-dev localmerge   # or: pnpm add -D / yarn add -D / bun add -d
-npx localmerge init
-```
-
-This does the whole setup, not just the config file:
-
-- **`localmerge.config.mjs`** — `integrationBranch` auto-detected from your
-  current branch, `checkCommand` auto-detected from package.json
-  (`check:push` / `check` / `ci` / `test`, first match wins).
-- **`CLAUDE.md`** (or appends to yours if you already have one) — the part
-  that makes the whole thing hands-off. Claude Code reads it automatically,
-  every session, and it tells the agent to land its own work once green,
-  without being asked. See "The hands-off part" below.
-- **`.claude/settings.json`** — the `WorktreeCreate` hook wired in (created,
-  or merged into your existing settings without touching anything else
-  already there).
-- **`.husky/pre-push`** — created or appended to, *if* you already have
-  Husky. If you don't, `init` tells you so instead of silently writing to
-  the untracked, not-shared-with-your-team `.git/hooks/pre-push`.
-- **`package.json` scripts** — `land`, `sync`, `promote`, `preview`, and
-  `preview:restore` added, skipping any you've already defined yourself.
-- **`localmerge-preflight.mjs`** + `preland`/`presync` scripts — a
-  self-contained safety net npm runs automatically before `land`/`sync`. If
-  this tool's own name/bin ever changes again (it has once — `lanekeeper` →
-  `localmerge`) and a lane hasn't rebased past that point yet, its
-  `package.json` still calls the old name, which no longer exists — a bare,
-  confusing `sh: lanekeeper: command not found`. This script catches that
-  case with an actual diagnosis ("this branch is stale relative to
-  origin/&lt;branch&gt; — rebase first") instead. It's deliberately plain
-  JS with zero dependency on `localmerge` itself, so it keeps working across
-  future renames too.
-
-**Commit everything it wrote**, then you're running. Two steps, not a setup
-guide.
-
-If `init` couldn't detect a `checkCommand` (no matching script in
-package.json), every push is **blocked** until you set one — see 🧰 What's
-in the box above. That's on purpose.
-
-From here on: `claude --worktree <name>` to spin up an isolated lane —
-LocalMerge's hook takes it from there, and CLAUDE.md tells the agent the rest.
-You show up to run `localmerge promote` when you actually want to ship. 🚀
 
 ## ⚙️ Configuration
 
