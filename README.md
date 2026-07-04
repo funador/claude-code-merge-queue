@@ -11,6 +11,8 @@
 
 # Claude Code Local Merge 🚦
 
+**The local, zero-cost merge queue for parallel Claude Code agents.**
+
 ## ⚡ Quickstart
 
 ```bash
@@ -56,8 +58,6 @@ in the box below. That's on purpose.
 From here on: `claude --worktree <name>` to spin up an isolated lane —
 Claude Code Local Merge's hook takes it from there, and CLAUDE.md tells the agent the rest.
 You show up to run `claude-code-local-merge promote` when you actually want to ship. 🚀
-
-**The local, zero-cost merge queue for parallel Claude Code agents.**
 
 Claude Code already isolates your agents — `--worktree` (or `isolation:
 "worktree"` on a subagent) gives every session its own git worktree, natively,
