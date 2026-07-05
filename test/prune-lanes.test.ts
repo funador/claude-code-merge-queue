@@ -4,7 +4,7 @@ import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isClaudeProcessRow, pruneLandedLanes } from "../src/lib/prune-lanes.js";
+import { isClaudeProcessRow, pruneLandedLanes, findOrphanedLanes } from "../src/lib/prune-lanes.js";
 import { DEFAULTS } from "../src/lib/config.js";
 
 function git(cwd: string, args: string[]): string {
@@ -12,7 +12,7 @@ function git(cwd: string, args: string[]): string {
 }
 
 function makeRepoWithRemote(): { mainTop: string; remote: string } {
-  const base = mkdtempSync(join(tmpdir(), "claude-code-local-merge-prune-"));
+  const base = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-prune-"));
   const remote = join(base, "remote.git");
   const mainTop = join(base, "main");
   execFileSync("git", ["init", "--quiet", "--bare", remote]);
@@ -101,6 +101,80 @@ test("pruneLandedLanes leaves a lane alone whose branch has NOT landed yet", () 
 
     assert.deepEqual(pruned, []);
     assert.ok(existsSync(wt1), "unlanded worktree must survive");
+  } finally {
+    rmSync(mainTop, { recursive: true, force: true });
+  }
+});
+
+test("findOrphanedLanes reports a sibling lane with unlanded commits and no live session — the abandoned-mid-land case", () => {
+  const { mainTop } = makeRepoWithRemote();
+  try {
+    const wt1 = addLaneWorktree(mainTop, 1);
+    writeFileSync(join(wt1, "unfinished.txt"), "wip\n");
+    git(wt1, ["add", "-A"]);
+    git(wt1, ["commit", "-q", "-m", "work that never landed"]);
+    // Deliberately NOT pushed — this is the "session got torn down mid-land" shape.
+
+    const orphaned = findOrphanedLanes(mainTop, cfg, "/some/other/currently-active-lane");
+
+    assert.equal(orphaned.length, 1);
+    assert.equal(orphaned[0]!.branch, `${DEFAULTS.branchPrefix}1`);
+    assert.equal(orphaned[0]!.aheadCount, 1);
+    assert.ok(existsSync(wt1), "reporting must never touch the lane");
+  } finally {
+    rmSync(mainTop, { recursive: true, force: true });
+  }
+});
+
+test("findOrphanedLanes leaves alone a lane that's already fully landed", () => {
+  const { mainTop } = makeRepoWithRemote();
+  try {
+    const wt1 = addLaneWorktree(mainTop, 1);
+    writeFileSync(join(wt1, "lane1.txt"), "done\n");
+    git(wt1, ["add", "-A"]);
+    git(wt1, ["commit", "-q", "-m", "lane 1 work"]);
+    git(wt1, ["push", "-q", "origin", "HEAD:main"]);
+    git(mainTop, ["fetch", "origin", "--quiet"]);
+
+    const orphaned = findOrphanedLanes(mainTop, cfg, "/some/other/currently-active-lane");
+
+    assert.deepEqual(orphaned, [], "fully-landed work has nothing to report — that's pruneLandedLanes' job");
+  } finally {
+    rmSync(mainTop, { recursive: true, force: true });
+  }
+});
+
+test("findOrphanedLanes never reports a lane with an active Claude Code session, no matter how far behind it is", () => {
+  const { mainTop } = makeRepoWithRemote();
+  const { binDir } = fakeLsofReporting("claude.ex  1234  jesse  cwd  DIR 1,18  64  123  __TARGET__");
+  const originalPath = process.env.PATH;
+  try {
+    const wt1 = addLaneWorktree(mainTop, 1);
+    writeFileSync(join(wt1, "wip.txt"), "still working\n");
+    git(wt1, ["add", "-A"]);
+    git(wt1, ["commit", "-q", "-m", "in progress"]);
+    process.env.PATH = `${binDir}:${originalPath}`;
+
+    const orphaned = findOrphanedLanes(mainTop, cfg, "/some/other/currently-active-lane");
+
+    assert.deepEqual(orphaned, [], "someone's actually at the keyboard here — never call this orphaned");
+  } finally {
+    process.env.PATH = originalPath;
+    rmSync(mainTop, { recursive: true, force: true });
+  }
+});
+
+test("findOrphanedLanes never reports the currently-active worktree, even with unlanded commits", () => {
+  const { mainTop } = makeRepoWithRemote();
+  try {
+    const wt1 = addLaneWorktree(mainTop, 1);
+    writeFileSync(join(wt1, "wip.txt"), "still working\n");
+    git(wt1, ["add", "-A"]);
+    git(wt1, ["commit", "-q", "-m", "in progress"]);
+
+    const orphaned = findOrphanedLanes(mainTop, cfg, wt1); // wt1 IS the "current" one this time
+
+    assert.deepEqual(orphaned, []);
   } finally {
     rmSync(mainTop, { recursive: true, force: true });
   }
@@ -280,7 +354,7 @@ function spawnSyncHelper() {
 // test can deterministically control what hasLiveProcessInside() sees
 // without depending on any real process's name.
 function fakeLsofReporting(rowTemplate: string): { binDir: string } {
-  const binDir = mkdtempSync(join(tmpdir(), "claude-code-local-merge-fake-lsof-"));
+  const binDir = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-fake-lsof-"));
   const script = `#!/bin/sh\ndir="\${*: -1}"\necho "COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME"\necho "${rowTemplate}" | sed "s|__TARGET__|\\$dir|"\n`;
   writeFileSync(join(binDir, "lsof"), script);
   chmodSync(join(binDir, "lsof"), 0o755);

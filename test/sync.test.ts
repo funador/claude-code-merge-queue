@@ -13,7 +13,7 @@ import { DEFAULTS } from "../src/lib/config.js";
  * against its contents, or its absence, to prove install ran or didn't.
  */
 function fakePackageManagerBin(exitCode = 0): { binDir: string; marker: string } {
-  const binDir = mkdtempSync(join(tmpdir(), "claude-code-local-merge-fakebin-"));
+  const binDir = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-fakebin-"));
   const marker = join(binDir, "install-ran.txt");
   writeFileSync(join(binDir, "npm"), `#!/bin/sh\necho "$@" >> "${marker}"\nexit ${exitCode}\n`);
   chmodSync(join(binDir, "npm"), 0o755);
@@ -21,7 +21,7 @@ function fakePackageManagerBin(exitCode = 0): { binDir: string; marker: string }
 }
 
 function pushLockfileChange(remote: string, filename: string, message: string): void {
-  const other = mkdtempSync(join(tmpdir(), "claude-code-local-merge-sync-other-"));
+  const other = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-sync-other-"));
   execFileSync("git", ["clone", "--quiet", remote, other]);
   git(other, ["config", "user.email", "test@test.com"]);
   git(other, ["config", "user.name", "Test"]);
@@ -37,7 +37,7 @@ function git(cwd: string, args: string[]): string {
 }
 
 function makeRepoWithRemote(branch = "main"): { dir: string; remote: string } {
-  const base = mkdtempSync(join(tmpdir(), "claude-code-local-merge-sync-"));
+  const base = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-sync-"));
   const remote = join(base, "remote.git");
   const dir = join(base, "checkout");
   execFileSync("git", ["init", "--quiet", "--bare", remote]);
@@ -85,7 +85,7 @@ test("sync fast-forwards the main checkout when it's on integrationBranch and be
   const cwd = process.cwd();
   try {
     // A second clone lands a new commit onto origin/main, simulating another lane landing.
-    const other = mkdtempSync(join(tmpdir(), "claude-code-local-merge-sync-other-"));
+    const other = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-sync-other-"));
     execFileSync("git", ["clone", "--quiet", remote, other]);
     git(other, ["config", "user.email", "test@test.com"]);
     git(other, ["config", "user.name", "Test"]);
@@ -108,7 +108,7 @@ test("sync fast-forwards the main checkout when it's on integrationBranch and be
 
 test("bare sync() falls back to DEFAULTS when MAIN has no config yet — and can wrongly refuse a real integrationBranch that isn't literally \"main\"", async () => {
   // The exact bootstrap gap: the main checkout doesn't have
-  // claude-code-local-merge.config.mjs yet (this push just introduced it, and sync is
+  // claude-code-merge-queue.config.mjs yet (this push just introduced it, and sync is
   // what's supposed to bring it over) — a bare sync() has no way to know
   // the real integrationBranch is "dev", not DEFAULTS' "main".
   const { dir } = makeRepoWithRemote("dev");
@@ -135,7 +135,7 @@ test("sync(providedCfg) uses the caller's already-loaded config instead of re-de
   const { dir, remote } = makeRepoWithRemote("dev");
   const cwd = process.cwd();
   try {
-    const other = mkdtempSync(join(tmpdir(), "claude-code-local-merge-sync-other-"));
+    const other = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-sync-other-"));
     execFileSync("git", ["clone", "--quiet", remote, other]);
     git(other, ["config", "user.email", "test@test.com"]);
     git(other, ["config", "user.name", "Test"]);
@@ -195,6 +195,52 @@ test("sync skips the install when the fast-forwarded range left the lockfile unt
     const code = await sync();
     assert.equal(code, 0);
     assert.ok(!existsSync(marker), "install should not have run — lockfile didn't change");
+  } finally {
+    process.env.PATH = originalPath;
+    process.chdir(cwd);
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(binDir, { recursive: true, force: true });
+  }
+});
+
+test("sync skips the install when a dependency was renamed — the shared node_modules would otherwise break every lane still on the old name", async () => {
+  const { dir, remote } = makeRepoWithRemote();
+  const cwd = process.cwd();
+  const { binDir, marker } = fakePackageManagerBin();
+  const originalPath = process.env.PATH;
+  try {
+    // Base commit has a real package.json so the "before" side of the diff
+    // has something to lose a key from.
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ devDependencies: { "old-name": "^1.0.0" } }));
+    writeFileSync(join(dir, "package-lock.json"), "v1\n");
+    git(dir, ["add", "-A"]);
+    git(dir, ["commit", "-q", "-m", "add package.json"]);
+    git(dir, ["push", "-q", "origin", "main"]);
+
+    const other = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-sync-other-"));
+    execFileSync("git", ["clone", "--quiet", remote, other]);
+    git(other, ["config", "user.email", "test@test.com"]);
+    git(other, ["config", "user.name", "Test"]);
+    writeFileSync(join(other, "package.json"), JSON.stringify({ devDependencies: { "new-name": "^1.0.0" } }));
+    writeFileSync(join(other, "package-lock.json"), "v2\n");
+    git(other, ["add", "-A"]);
+    git(other, ["commit", "-q", "-m", "rename old-name to new-name"]);
+    git(other, ["push", "-q", "origin", "main"]);
+    rmSync(other, { recursive: true, force: true });
+
+    process.chdir(dir);
+    process.env.PATH = `${binDir}:${originalPath}`;
+    let stderr = "";
+    const origError = console.error;
+    console.error = (...args: unknown[]) => {
+      stderr += args.join(" ");
+    };
+    const code = await sync();
+    console.error = origError;
+
+    assert.equal(code, 0);
+    assert.ok(!existsSync(marker), "install should NOT have run — a removed dependency key needs a human");
+    assert.match(stderr, /dropped old-name/);
   } finally {
     process.env.PATH = originalPath;
     process.chdir(cwd);

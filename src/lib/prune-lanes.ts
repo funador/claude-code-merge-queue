@@ -43,7 +43,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { basename, dirname } from "node:path";
-import type { ClaudeCodeLocalMergeConfig } from "./config.js";
+import type { ClaudeCodeMergeQueueConfig } from "./config.js";
 
 /**
  * Is a Claude Code session's current working directory inside `dir` right
@@ -129,6 +129,68 @@ function listWorktrees(mainTop: string): WorktreeEntry[] {
   return entries;
 }
 
+export interface OrphanedLane {
+  path: string;
+  branch: string;
+  aheadCount: number;
+}
+
+/**
+ * The mirror image of pruneLandedLanes' ancestor check: sibling lanes with
+ * commits NOT on origin/<integrationBranch> AND no live Claude Code process
+ * attached — real work that started landing (or never started), then the
+ * session/terminal driving it went away (closed, crashed, torn down mid-check)
+ * before it ever reached the branch. The crash-safe queue lock already
+ * guarantees this can't jam OTHER lanes (a dead holder's lock is reclaimed by
+ * PID-liveness) — but the abandoned lane itself was, until now, silent:
+ * nothing else ever looks at a lane once its own session is gone. This never
+ * touches or modifies a lane, only reports it, so a human can go finish
+ * landing it or discard it.
+ */
+export function findOrphanedLanes(
+  mainTop: string,
+  cfg: Pick<ClaudeCodeMergeQueueConfig, "worktreeSuffix" | "branchPrefix" | "integrationBranch">,
+  currentWorktree: string,
+): OrphanedLane[] {
+  const orphaned: OrphanedLane[] = [];
+  const mainTopReal = realpathSync(mainTop);
+  const currentWorktreeReal = existsRealpath(currentWorktree);
+  const laneDirPrefix = `${basename(mainTopReal)}${cfg.worktreeSuffix}`;
+  const parent = dirname(mainTopReal);
+  const upstream = `origin/${cfg.integrationBranch}`;
+
+  let worktrees: WorktreeEntry[];
+  try {
+    worktrees = listWorktrees(mainTop);
+  } catch {
+    return orphaned;
+  }
+
+  for (const { path: wt, branch } of worktrees) {
+    if (wt === mainTopReal || wt === currentWorktreeReal) continue; // never report the lane running this check
+    if (dirname(wt) !== parent || !basename(wt).startsWith(laneDirPrefix)) continue; // not one of ours
+    if (!branch || !branch.startsWith(cfg.branchPrefix)) continue;
+
+    let aheadOut: string;
+    try {
+      aheadOut = execFileSync("git", ["rev-list", "--count", `${upstream}..${branch}`], {
+        cwd: mainTop,
+        encoding: "utf8",
+      }).trim();
+    } catch {
+      continue; // upstream or branch not resolvable — nothing to report
+    }
+    const aheadCount = Number(aheadOut) || 0;
+    if (aheadCount === 0) continue; // fully landed (or a brand-new empty lane) — not orphaned
+
+    if (hasLiveProcessInside(wt)) continue; // someone's actively driving it — not orphaned
+
+    orphaned.push({ path: wt, branch, aheadCount });
+  }
+
+  return orphaned;
+}
+
 /**
  * Removes already-landed sibling lane worktrees. Returns the paths it
  * actually removed. Best-effort throughout — any failure for a given
@@ -137,7 +199,7 @@ function listWorktrees(mainTop: string): WorktreeEntry[] {
  */
 export function pruneLandedLanes(
   mainTop: string,
-  cfg: Pick<ClaudeCodeLocalMergeConfig, "worktreeSuffix" | "branchPrefix" | "integrationBranch" | "regenerableFiles">,
+  cfg: Pick<ClaudeCodeMergeQueueConfig, "worktreeSuffix" | "branchPrefix" | "integrationBranch" | "regenerableFiles">,
   currentWorktree: string,
 ): string[] {
   const pruned: string[] = [];
