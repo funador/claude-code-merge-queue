@@ -14,9 +14,9 @@
  * framework's fingerprints show up is `buildOutputDirs` in your config
  * (never copy someone's stale ".next" or "dist" over a live checkout).
  *
- *   claude-code-local-merge preview            from a lane worktree — swap the dev server
+ *   claude-code-merge-queue preview            from a lane worktree — swap the dev server
  *                                 to show THIS lane's current working tree.
- *   claude-code-local-merge preview --restore  from anywhere — put the dev server back on
+ *   claude-code-merge-queue preview --restore  from anywhere — put the dev server back on
  *                                 the integration branch's real HEAD.
  *
  * Safety:
@@ -75,11 +75,11 @@ function restore(target: string, manifestPath: string): void {
 
 function preview(source: string, target: string, manifestPath: string, excludes: string[]): void {
   if (source === target) {
-    console.error("claude-code-local-merge preview: refusing to run from the dev-server checkout itself — run this from a lane worktree.");
+    console.error("claude-code-merge-queue preview: refusing to run from the dev-server checkout itself — run this from a lane worktree.");
     process.exit(1);
   }
   if (existsSync(manifestPath)) {
-    console.error(`${RED}preview: a preview is already active on the dev server.${RESET} Run 'claude-code-local-merge preview --restore' first.`);
+    console.error(`${RED}preview: a preview is already active on the dev server.${RESET} Run 'claude-code-merge-queue preview --restore' first.`);
     process.exit(1);
   }
   const before = gitStatus(target);
@@ -106,20 +106,20 @@ function preview(source: string, target: string, manifestPath: string, excludes:
   writeFileSync(manifestPath, JSON.stringify({ branch, addedPaths } satisfies Manifest, null, 2));
 
   console.log(`${GREEN}✓ dev server now showing ${branch}.${RESET} Refresh the browser.`);
-  console.log(`${DIM}Run 'claude-code-local-merge preview --restore' when done.${RESET}`);
+  console.log(`${DIM}Run 'claude-code-merge-queue preview --restore' when done.${RESET}`);
 }
 
 export async function runPreview(args: string[]): Promise<void> {
   const source = process.cwd();
   const target = resolveMainCheckout(source);
-  const manifestPath = join(tmpdir(), `claude-code-local-merge-preview-manifest-${createHash("sha1").update(target).digest("hex").slice(0, 12)}.json`);
+  const manifestPath = join(tmpdir(), `claude-code-merge-queue-preview-manifest-${createHash("sha1").update(target).digest("hex").slice(0, 12)}.json`);
 
   // Fail fast and legibly if rsync isn't available, rather than a cryptic
   // spawn ENOENT partway through copying files.
   try {
     execSync("command -v rsync", { stdio: "ignore" });
   } catch {
-    console.error("claude-code-local-merge preview: rsync is required and wasn't found on PATH.");
+    console.error("claude-code-merge-queue preview: rsync is required and wasn't found on PATH.");
     process.exit(1);
   }
 

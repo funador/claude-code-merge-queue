@@ -16,8 +16,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ClaimRegistry, withEphemeralResource, type EphemeralResourceProvider } from "../src/lib/ephemeral.js";
 
-const REGISTRY_DIR = join(tmpdir(), "claude-code-local-merge-example-ephemeral-registry");
-const RESOURCE_ROOT = join(tmpdir(), "claude-code-local-merge-example-ephemeral-resources");
+const REGISTRY_DIR = join(tmpdir(), "claude-code-merge-queue-example-ephemeral-registry");
+const RESOURCE_ROOT = join(tmpdir(), "claude-code-merge-queue-example-ephemeral-resources");
 mkdirSync(RESOURCE_ROOT, { recursive: true });
 
 const tmpDirProvider: EphemeralResourceProvider<string> = {

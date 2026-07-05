@@ -30,7 +30,7 @@ function readEvents(resultsFile: string): { pid: number; event: "start" | "end";
 }
 
 test("mutual exclusion: four concurrent workers never overlap while holding the lock", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "claude-code-local-merge-lock-test-"));
+  const dir = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-lock-test-"));
   const resultsFile = join(dir, "results.ndjson");
   const queueName = `test-mutex-${process.pid}-${Date.now()}`;
 
@@ -57,7 +57,7 @@ test("mutual exclusion: four concurrent workers never overlap while holding the 
 });
 
 test("crash safety: a killed holder is reclaimed, not a permanent deadlock", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "claude-code-local-merge-lock-test-"));
+  const dir = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-lock-test-"));
   const resultsFile = join(dir, "results.ndjson");
   const queueName = `test-crash-${process.pid}-${Date.now()}`;
 

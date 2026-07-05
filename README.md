@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="Claude Code Local Merge — the local, zero-cost merge queue for parallel Claude Code agents" width="100%" />
+  <img src="assets/banner.svg" alt="Claude Code Merge Queue — the local, zero-cost merge queue for parallel Claude Code agents" width="100%" />
 </p>
 
 <p align="center">
@@ -9,11 +9,11 @@
   <img alt="Runtime deps" src="https://img.shields.io/badge/runtime%20deps-0-brightgreen.svg">
 </p>
 
-# Claude Code Local Merge 🚦
+# Claude Code Merge Queue 🚦
 
 Claude Code already isolates your agents — `--worktree` (or `isolation:
 "worktree"` on a subagent) gives every session its own git worktree, natively,
-no setup. That part's solved. Claude Code Local Merge is the part that comes after: what
+no setup. That part's solved. Claude Code Merge Queue is the part that comes after: what
 happens when four isolated agents all try to land, build, and test *at the
 same time*.
 
@@ -39,13 +39,13 @@ exactly the wrong moment, and mean nothing by it.
 ## ⚡ Quickstart
 
 ```bash
-npm install --save-dev claude-code-local-merge   # or: pnpm add -D / yarn add -D / bun add -d
-npx claude-code-local-merge init
+npm install --save-dev claude-code-merge-queue   # or: pnpm add -D / yarn add -D / bun add -d
+npx claude-code-merge-queue init
 ```
 
 This does the whole setup, not just the config file:
 
-- **`claude-code-local-merge.config.mjs`** — `integrationBranch` auto-detected from your
+- **`claude-code-merge-queue.config.mjs`** — `integrationBranch` auto-detected from your
   current branch, `checkCommand` auto-detected from package.json
   (`check:push` / `check` / `ci` / `test`, first match wins).
 - **`CLAUDE.md`** (or appends to yours if you already have one) — the part
@@ -60,15 +60,15 @@ This does the whole setup, not just the config file:
   the untracked, not-shared-with-your-team `.git/hooks/pre-push`.
 - **`package.json` scripts** — `land`, `sync`, `promote`, `preview`, and
   `preview:restore` added, skipping any you've already defined yourself.
-- **`claude-code-local-merge-preflight.mjs`** + `preland`/`presync` scripts — a
+- **`claude-code-merge-queue-preflight.mjs`** + `preland`/`presync` scripts — a
   self-contained safety net npm runs automatically before `land`/`sync`. If
   this tool's own name/bin ever changes again (it has once — `lanekeeper` →
-  `claude-code-local-merge`) and a lane hasn't rebased past that point yet, its
+  `claude-code-merge-queue`) and a lane hasn't rebased past that point yet, its
   `package.json` still calls the old name, which no longer exists — a bare,
   confusing `sh: lanekeeper: command not found`. This script catches that
   case with an actual diagnosis ("this branch is stale relative to
   origin/&lt;branch&gt; — rebase first") instead. It's deliberately plain
-  JS with zero dependency on `claude-code-local-merge` itself, so it keeps working across
+  JS with zero dependency on `claude-code-merge-queue` itself, so it keeps working across
   future renames too.
 
 **Commit everything it wrote**, then you're running. Two steps, not a setup
@@ -79,14 +79,14 @@ package.json), every push is **blocked** until you set one — see 🧰 What's
 in the box below. That's on purpose.
 
 From here on: `claude --worktree <name>` to spin up an isolated lane —
-Claude Code Local Merge's hook takes it from there, and CLAUDE.md tells the agent the rest.
-You show up to run `claude-code-local-merge promote` when you actually want to ship. 🚀
+Claude Code Merge Queue's hook takes it from there, and CLAUDE.md tells the agent the rest.
+You show up to run `claude-code-merge-queue promote` when you actually want to ship. 🚀
 
 ## 🆚 vs. GitHub's Merge Queue
 
 GitHub already ships a merge queue. Two things it costs you that this doesn't:
 
-| | GitHub Merge Queue | Claude Code Local Merge |
+| | GitHub Merge Queue | Claude Code Merge Queue |
 |---|---|---|
 | Private repo | **Enterprise Cloud only** | Any plan, any repo |
 | Cost per landing | GitHub Actions minutes, every queue attempt | $0 — runs on your own machine |
@@ -99,14 +99,14 @@ locally instead of in someone else's billed cloud. 💸
 
 | Command | What it does |
 |---|---|
-| `claude-code-local-merge hook worktree-create` | A Claude Code `WorktreeCreate` hook. Plugs Claude Code Local Merge's numbered lanes into Claude's *native* worktree creation — doesn't reinvent it. |
-| `claude-code-local-merge build-lock -- <cmd>` | Runs `<cmd>` — your build — serialized across every lane, machine-wide. |
-| `claude-code-local-merge land` | Rebases and pushes your lane onto the integration branch through a FIFO queue, so two lanes are never mid-push at once. Agents run this themselves — see below. |
-| `claude-code-local-merge sync` | Fast-forwards your main checkout so a dev server actually sees what just landed — and re-installs dependencies if the lockfile changed, so the `node_modules` every lane symlinks from never goes stale. |
-| `claude-code-local-merge promote` | Ships the integration branch to production. **Human-only** — never in an agent's instructions, never automated. |
-| `claude-code-local-merge preview` | Instantly mirrors a lane's live working tree — uncommitted changes included — onto the main checkout, so you can look at it without a build. |
-| `claude-code-local-merge port` | Prints a lane's dev-server port, derived from its own directory name. |
-| `claude-code-local-merge prune` | Removes already-landed sibling lane worktrees on demand — `land` already does this automatically, this is for "clean these up right now" instead of waiting for the next lane to land something. |
+| `claude-code-merge-queue hook worktree-create` | A Claude Code `WorktreeCreate` hook. Plugs Claude Code Merge Queue's numbered lanes into Claude's *native* worktree creation — doesn't reinvent it. |
+| `claude-code-merge-queue build-lock -- <cmd>` | Runs `<cmd>` — your build — serialized across every lane, machine-wide. |
+| `claude-code-merge-queue land` | Rebases and pushes your lane onto the integration branch through a FIFO queue, so two lanes are never mid-push at once. Agents run this themselves — see below. |
+| `claude-code-merge-queue sync` | Fast-forwards your main checkout so a dev server actually sees what just landed — and re-installs dependencies if the lockfile changed, so the `node_modules` every lane symlinks from never goes stale. |
+| `claude-code-merge-queue promote` | Ships the integration branch to production. **Human-only** — never in an agent's instructions, never automated. |
+| `claude-code-merge-queue preview` | Instantly mirrors a lane's live working tree — uncommitted changes included — onto the main checkout, so you can look at it without a build. |
+| `claude-code-merge-queue port` | Prints a lane's dev-server port, derived from its own directory name. |
+| `claude-code-merge-queue prune` | Removes already-landed sibling lane worktrees on demand — `land` already does this automatically, this is for "clean these up right now" instead of waiting for the next lane to land something. |
 
 Plus 🔒 a pre-push hook that makes `land` non-optional: a direct `git push`
 straight to the integration branch gets bounced, full stop. Not a lint
@@ -129,7 +129,7 @@ crashed run's copy needs to clean itself up without anyone noticing it died.
 ## ⚙️ Configuration
 
 Everything lives in one file — see
-[`examples/claude-code-local-merge.config.mjs`](examples/claude-code-local-merge.config.mjs) for every
+[`examples/claude-code-merge-queue.config.mjs`](examples/claude-code-merge-queue.config.mjs) for every
 field with comments. The short version:
 
 ```js
@@ -160,7 +160,7 @@ in `protectedBranches` — has a real way through it. One env var, no
 prompts, no second factor to remember:
 
 ```bash
-CLAUDE_CODE_LOCAL_MERGE_EMERGENCY_PUSH=1 git push origin HEAD:main
+CLAUDE_CODE_MERGE_QUEUE_EMERGENCY_PUSH=1 git push origin HEAD:main
 ```
 
 This is the one place that's honestly a convention, not a hard guarantee:
@@ -173,7 +173,7 @@ Tests are the reviewer, not a human, at any point in this pipeline.
 
 - **`checkCommand` gates landing.** Nothing reaches `integrationBranch`
   without passing it — the only correctness check most changes get.
-- **`claude-code-local-merge promote` is a release decision, not a code
+- **`claude-code-merge-queue promote` is a release decision, not a code
   review.** It means "this already-tested work should ship now," not "I
   read the diff." Your own CI on the production branch is a second
   automated checkpoint — still not a human one.
@@ -240,7 +240,7 @@ Things a sharp reader should already know before they ask:
   stuck forever (confirmed live). Missing `lsof` fails closed — treats
   liveness as unknown, never removes.
 - **The `WorktreeCreate` hook needs the host project's own real install.**
-  It runs via `npx claude-code-local-merge hook worktree-create` (no
+  It runs via `npx claude-code-merge-queue hook worktree-create` (no
   `node_modules/.bin` on PATH for a raw hook, unlike an `npm run` script),
   and npx silently falls back to an ephemeral, unpinned copy if it can't
   resolve the package locally — which happened in production and masked a

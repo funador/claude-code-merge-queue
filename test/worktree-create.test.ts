@@ -12,7 +12,7 @@ const WORKER = fileURLToPath(new URL("./helpers/worktree-create-worker.ts", impo
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 function makeScratchRepo(): string {
-  const dir = mkdtempSync(join(tmpdir(), "claude-code-local-merge-wt-test-"));
+  const dir = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-wt-test-"));
   execFileSync("git", ["init", "-q"], { cwd: dir });
   execFileSync("git", ["commit", "-q", "--allow-empty", "-m", "init"], { cwd: dir });
   return dir;
@@ -55,21 +55,21 @@ test("createLane claims sequential lane numbers and creates real worktrees", () 
 
 test("createLane bases a new lane on the main checkout's own HEAD, not a stale origin/integrationBranch", () => {
   const mainTop = makeScratchRepo();
-  const remote = mkdtempSync(join(tmpdir(), "claude-code-local-merge-wt-remote-"));
+  const remote = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-wt-remote-"));
   try {
     execFileSync("git", ["init", "-q", "--bare", remote]);
     execFileSync("git", ["branch", "-M", "main"], { cwd: mainTop });
     execFileSync("git", ["remote", "add", "origin", remote], { cwd: mainTop });
     execFileSync("git", ["push", "-q", "origin", "main"], { cwd: mainTop });
 
-    // A commit made locally but never pushed — e.g. `claude-code-local-merge init`'s own
+    // A commit made locally but never pushed — e.g. `claude-code-merge-queue init`'s own
     // wiring commit, right after Quickstart, before anyone has pushed it.
-    execFileSync("node", ["-e", "require('fs').writeFileSync('claude-code-local-merge.config.mjs', 'x')"], { cwd: mainTop });
+    execFileSync("node", ["-e", "require('fs').writeFileSync('claude-code-merge-queue.config.mjs', 'x')"], { cwd: mainTop });
     execFileSync("git", ["add", "-A"], { cwd: mainTop });
     execFileSync("git", ["commit", "-q", "-m", "local-only wiring commit"], { cwd: mainTop });
 
     const { wt } = createLane(mainTop, { ...DEFAULTS, integrationBranch: "main" });
-    assert.ok(existsSync(join(wt, "claude-code-local-merge.config.mjs")), "new lane must inherit the unpushed local commit, not fall back to stale origin/main");
+    assert.ok(existsSync(join(wt, "claude-code-merge-queue.config.mjs")), "new lane must inherit the unpushed local commit, not fall back to stale origin/main");
   } finally {
     cleanupRepoAndLanes(mainTop);
     rmSync(remote, { recursive: true, force: true });
@@ -150,29 +150,29 @@ test("the hook resolves the main checkout correctly when invoked from INSIDE an 
 });
 
 test("isEphemeralNpxCopy detects npm's npx cache path and nothing else", () => {
-  assert.equal(isEphemeralNpxCopy("/Users/jesse/.npm/_npx/abc123/node_modules/claude-code-local-merge/dist/hooks/worktree-create.js"), true);
-  assert.equal(isEphemeralNpxCopy("/Users/jesse/Desktop/projects/hola/node_modules/claude-code-local-merge/dist/hooks/worktree-create.js"), false);
-  assert.equal(isEphemeralNpxCopy("/Users/jesse/Desktop/projects/hola-2/node_modules/claude-code-local-merge/dist/hooks/worktree-create.js"), false);
+  assert.equal(isEphemeralNpxCopy("/Users/jesse/.npm/_npx/abc123/node_modules/claude-code-merge-queue/dist/hooks/worktree-create.js"), true);
+  assert.equal(isEphemeralNpxCopy("/Users/jesse/Desktop/projects/hola/node_modules/claude-code-merge-queue/dist/hooks/worktree-create.js"), false);
+  assert.equal(isEphemeralNpxCopy("/Users/jesse/Desktop/projects/hola-2/node_modules/claude-code-merge-queue/dist/hooks/worktree-create.js"), false);
   // A pnpm/yarn-style nested store path is a real, legitimate local install —
   // must not be mistaken for the ephemeral cache just because it's nested.
   assert.equal(
-    isEphemeralNpxCopy("/Users/jesse/project/node_modules/.pnpm/claude-code-local-merge@0.1.3/node_modules/claude-code-local-merge/dist/hooks/worktree-create.js"),
+    isEphemeralNpxCopy("/Users/jesse/project/node_modules/.pnpm/claude-code-merge-queue@0.1.3/node_modules/claude-code-merge-queue/dist/hooks/worktree-create.js"),
     false,
   );
 });
 
-test("expectsLocalInstall is true only when the host's own package.json actually declares claude-code-local-merge", () => {
-  const dir = mkdtempSync(join(tmpdir(), "claude-code-local-merge-expects-"));
+test("expectsLocalInstall is true only when the host's own package.json actually declares claude-code-merge-queue", () => {
+  const dir = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-expects-"));
   try {
     assert.equal(expectsLocalInstall(dir), false, "no package.json at all — e.g. a Haskell/Rust/Lua repo");
 
     writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "x" }));
-    assert.equal(expectsLocalInstall(dir), false, "package.json exists but never mentions claude-code-local-merge");
+    assert.equal(expectsLocalInstall(dir), false, "package.json exists but never mentions claude-code-merge-queue");
 
-    writeFileSync(join(dir, "package.json"), JSON.stringify({ devDependencies: { "claude-code-local-merge": "^0.1.7" } }));
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ devDependencies: { "claude-code-merge-queue": "^0.1.7" } }));
     assert.equal(expectsLocalInstall(dir), true, "declared as a devDependency — a local install is expected");
 
-    writeFileSync(join(dir, "package.json"), JSON.stringify({ dependencies: { "claude-code-local-merge": "^0.1.7" } }));
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ dependencies: { "claude-code-merge-queue": "^0.1.7" } }));
     assert.equal(expectsLocalInstall(dir), true, "declared as a regular dependency too");
 
     writeFileSync(join(dir, "package.json"), "{ not valid json");
@@ -183,8 +183,8 @@ test("expectsLocalInstall is true only when the host's own package.json actually
 });
 
 test("the hook refuses to run and fails loud when invoked from npx's ephemeral cache instead of the project's real install", async () => {
-  // Reproduces the actual production incident: node_modules/claude-code-local-merge was
-  // missing/mid-upgrade, .claude/settings.json's `npx claude-code-local-merge hook
+  // Reproduces the actual production incident: node_modules/claude-code-merge-queue was
+  // missing/mid-upgrade, .claude/settings.json's `npx claude-code-merge-queue hook
   // worktree-create` silently fell back to fetching and running an
   // ephemeral copy instead of erroring, and that fallback kept "working"
   // well enough that the broken install went unnoticed until `land` needed
@@ -193,13 +193,13 @@ test("the hook refuses to run and fails loud when invoked from npx's ephemeral c
   // convention, must refuse to proceed instead of silently claiming a lane.
   const mainTop = makeScratchRepo();
   // The guard only fires when the host project actually expects a local
-  // install — declare claude-code-local-merge as a devDependency, matching hola's real
+  // install — declare claude-code-merge-queue as a devDependency, matching hola's real
   // package.json at the time of the incident.
-  writeFileSync(join(mainTop, "package.json"), JSON.stringify({ devDependencies: { "claude-code-local-merge": "^0.1.3" } }));
+  writeFileSync(join(mainTop, "package.json"), JSON.stringify({ devDependencies: { "claude-code-merge-queue": "^0.1.3" } }));
   execFileSync("git", ["add", "-A"], { cwd: mainTop });
   execFileSync("git", ["commit", "-q", "-m", "add package.json"], { cwd: mainTop });
-  const npxSimRoot = mkdtempSync(join(tmpdir(), "claude-code-local-merge-npxsim-"));
-  const copyRoot = join(npxSimRoot, "_npx", "deadbeef1234", "node_modules", "claude-code-local-merge");
+  const npxSimRoot = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-npxsim-"));
+  const copyRoot = join(npxSimRoot, "_npx", "deadbeef1234", "node_modules", "claude-code-merge-queue");
   try {
     mkdirSync(copyRoot, { recursive: true });
     // tsx/esbuild picks a module format by walking up for the nearest
@@ -234,13 +234,13 @@ test("the hook refuses to run and fails loud when invoked from npx's ephemeral c
 test("a non-Node host repo (no package.json at all) can still create a lane from npx's ephemeral cache — that's the only way it can ever run, not a broken install", async () => {
   // Caught live testing against real non-JS repos (Haskell, in that case):
   // a host project with no package.json has nowhere to `npm install`
-  // claude-code-local-merge INTO, so npx's ephemeral cache is the only way it can ever
-  // run claude-code-local-merge commands. The guard above must not treat that as a
+  // claude-code-merge-queue INTO, so npx's ephemeral cache is the only way it can ever
+  // run claude-code-merge-queue commands. The guard above must not treat that as a
   // broken install for a project that was never expected to have a local
   // one in the first place.
   const mainTop = makeScratchRepo(); // no package.json — e.g. a Haskell/Rust/Lua repo
-  const npxSimRoot = mkdtempSync(join(tmpdir(), "claude-code-local-merge-npxsim-nonnode-"));
-  const copyRoot = join(npxSimRoot, "_npx", "deadbeef5678", "node_modules", "claude-code-local-merge");
+  const npxSimRoot = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-npxsim-nonnode-"));
+  const copyRoot = join(npxSimRoot, "_npx", "deadbeef5678", "node_modules", "claude-code-merge-queue");
   try {
     mkdirSync(copyRoot, { recursive: true });
     writeFileSync(join(copyRoot, "package.json"), JSON.stringify({ type: "module" }));

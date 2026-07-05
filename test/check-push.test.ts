@@ -8,14 +8,14 @@ function refLine(remoteRef: string): string {
   return `refs/heads/local abc123 ${remoteRef} def456`;
 }
 
-test("blocks a direct push to the integration branch without CLAUDE_CODE_LOCAL_MERGE_LANDING", () => {
+test("blocks a direct push to the integration branch without CLAUDE_CODE_MERGE_QUEUE_LANDING", () => {
   const result = checkPush(parseRefUpdates(refLine("refs/heads/dev")), cfg, {});
   assert.equal(result.ok, false);
-  assert.match(result.message ?? "", /claude-code-local-merge land/);
+  assert.match(result.message ?? "", /claude-code-merge-queue land/);
 });
 
-test("allows a push to the integration branch when CLAUDE_CODE_LOCAL_MERGE_LANDING=1", () => {
-  const result = checkPush(parseRefUpdates(refLine("refs/heads/dev")), cfg, { CLAUDE_CODE_LOCAL_MERGE_LANDING: "1" });
+test("allows a push to the integration branch when CLAUDE_CODE_MERGE_QUEUE_LANDING=1", () => {
+  const result = checkPush(parseRefUpdates(refLine("refs/heads/dev")), cfg, { CLAUDE_CODE_MERGE_QUEUE_LANDING: "1" });
   assert.equal(result.ok, true);
 });
 
@@ -30,18 +30,18 @@ test("blocks a direct push to an explicit protectedBranches entry", () => {
   assert.equal(result.ok, false);
 });
 
-test("allows a push to a protected branch when CLAUDE_CODE_LOCAL_MERGE_EMERGENCY_PUSH=1", () => {
-  const result = checkPush(parseRefUpdates(refLine("refs/heads/main")), cfg, { CLAUDE_CODE_LOCAL_MERGE_EMERGENCY_PUSH: "1" });
+test("allows a push to a protected branch when CLAUDE_CODE_MERGE_QUEUE_EMERGENCY_PUSH=1", () => {
+  const result = checkPush(parseRefUpdates(refLine("refs/heads/main")), cfg, { CLAUDE_CODE_MERGE_QUEUE_EMERGENCY_PUSH: "1" });
   assert.equal(result.ok, true);
 });
 
-test("allows a push to the integration branch when CLAUDE_CODE_LOCAL_MERGE_EMERGENCY_PUSH=1", () => {
-  const result = checkPush(parseRefUpdates(refLine("refs/heads/dev")), cfg, { CLAUDE_CODE_LOCAL_MERGE_EMERGENCY_PUSH: "1" });
+test("allows a push to the integration branch when CLAUDE_CODE_MERGE_QUEUE_EMERGENCY_PUSH=1", () => {
+  const result = checkPush(parseRefUpdates(refLine("refs/heads/dev")), cfg, { CLAUDE_CODE_MERGE_QUEUE_EMERGENCY_PUSH: "1" });
   assert.equal(result.ok, true);
 });
 
-test("blocks a protected-branch push when CLAUDE_CODE_LOCAL_MERGE_EMERGENCY_PUSH isn't exactly \"1\"", () => {
-  const result = checkPush(parseRefUpdates(refLine("refs/heads/main")), cfg, { CLAUDE_CODE_LOCAL_MERGE_EMERGENCY_PUSH: "true" });
+test("blocks a protected-branch push when CLAUDE_CODE_MERGE_QUEUE_EMERGENCY_PUSH isn't exactly \"1\"", () => {
+  const result = checkPush(parseRefUpdates(refLine("refs/heads/main")), cfg, { CLAUDE_CODE_MERGE_QUEUE_EMERGENCY_PUSH: "true" });
   assert.equal(result.ok, false);
 });
 

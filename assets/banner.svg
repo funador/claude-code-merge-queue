@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="520" viewBox="0 0 1400 520" fill="none" role="img" aria-label="Claude Code Local Merge — the local, zero-cost merge queue for parallel Claude Code agents">
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="520" viewBox="0 0 1400 520" fill="none" role="img" aria-label="Claude Code Merge Queue — the local, zero-cost merge queue for parallel Claude Code agents">
   <defs>
     <linearGradient id="cardBg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#0B1120"></stop>
@@ -16,14 +16,14 @@
   <circle cx="119" cy="141" r="7.5" fill="#FFC53D"></circle>
   <circle cx="119" cy="165" r="7.5" fill="#16E0AD"></circle>
 
-  <text x="164" y="178" font-family="&#39;DM Sans&#39;, system-ui, -apple-system, &#39;Segoe UI&#39;, Roboto, sans-serif" font-weight="700" font-size="56" fill="#F5F7FA">Claude Code Local Merge</text>
+  <text x="164" y="178" font-family="&#39;DM Sans&#39;, system-ui, -apple-system, &#39;Segoe UI&#39;, Roboto, sans-serif" font-weight="700" font-size="56" fill="#F5F7FA">Claude Code Merge Queue</text>
 
   <text x="100" y="228" font-family="&#39;DM Sans&#39;, system-ui, -apple-system, &#39;Segoe UI&#39;, Roboto, sans-serif" font-weight="500" font-size="26" fill="#9AA6BC">The local, zero-cost merge queue</text>
   <text x="100" y="264" font-family="&#39;DM Sans&#39;, system-ui, -apple-system, &#39;Segoe UI&#39;, Roboto, sans-serif" font-weight="500" font-size="26" fill="#9AA6BC">for parallel Claude Code agents.</text>
 
   <rect x="100" y="304" width="580" height="112" rx="14" fill="rgba(255,0,160,0.13)" stroke="rgba(255,0,160,0.38)"></rect>
-  <text x="126" y="345" font-family="&#39;JetBrains Mono&#39;, ui-monospace, SFMono-Regular, Menlo, monospace" font-weight="500" font-size="19" fill="#FF6AD0"><tspan fill="#7C8BA5">$ </tspan>npm install --save-dev claude-code-local-merge</text>
-  <text x="126" y="382" font-family="&#39;JetBrains Mono&#39;, ui-monospace, SFMono-Regular, Menlo, monospace" font-weight="500" font-size="19" fill="#FF6AD0"><tspan fill="#7C8BA5">$ </tspan>npx claude-code-local-merge init</text>
+  <text x="126" y="345" font-family="&#39;JetBrains Mono&#39;, ui-monospace, SFMono-Regular, Menlo, monospace" font-weight="500" font-size="19" fill="#FF6AD0"><tspan fill="#7C8BA5">$ </tspan>npm install --save-dev claude-code-merge-queue</text>
+  <text x="126" y="382" font-family="&#39;JetBrains Mono&#39;, ui-monospace, SFMono-Regular, Menlo, monospace" font-weight="500" font-size="19" fill="#FF6AD0"><tspan fill="#7C8BA5">$ </tspan>npx claude-code-merge-queue init</text>
 
   <g stroke-linecap="round">
     <path d="M980 100 C 1040 100, 1060 400, 1090 400" stroke="#FF2EAE" stroke-width="6"></path>

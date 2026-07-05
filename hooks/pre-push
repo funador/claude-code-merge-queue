@@ -6,18 +6,18 @@
 # worktree) or straight to
 # .git/hooks/pre-push (works, but isn't versioned or shared with the team).
 # If you already have a pre-push hook, append this block instead of
-# replacing the file. `claude-code-local-merge init` does all of this for you.
+# replacing the file. `claude-code-merge-queue init` does all of this for you.
 #
-# `claude-code-local-merge check-push` does two things, in order:
+# `claude-code-merge-queue check-push` does two things, in order:
 #   1. Blocks a direct push to your integration/protected/production
-#      branches that didn't go through `claude-code-local-merge land` / `promote`.
-#   2. Runs `checkCommand` from claude-code-local-merge.config.mjs (your lint/typecheck/
+#      branches that didn't go through `claude-code-merge-queue land` / `promote`.
+#   2. Runs `checkCommand` from claude-code-merge-queue.config.mjs (your lint/typecheck/
 #      test/build) and fails the push if it fails — or if checkCommand
 #      isn't set and checksRequired wasn't deliberately turned off.
 #
 # See src/land.ts and src/lib/check-push.ts for why a convention alone
 # isn't enough to guarantee either of those.
 
-if ! npx claude-code-local-merge check-push; then
+if ! npx claude-code-merge-queue check-push; then
   exit 1
 fi

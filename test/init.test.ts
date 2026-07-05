@@ -6,14 +6,14 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const CLI = resolve(fileURLToPath(import.meta.url), "..", "..", "dist", "bin", "claude-code-local-merge.js");
+const CLI = resolve(fileURLToPath(import.meta.url), "..", "..", "dist", "bin", "claude-code-merge-queue.js");
 
 function git(cwd: string, args: string[]): string {
   return execFileSync("git", args, { cwd, encoding: "utf8" });
 }
 
 function scratchRepo(branch: string): string {
-  const dir = mkdtempSync(join(tmpdir(), "claude-code-local-merge-init-"));
+  const dir = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-init-"));
   git(dir, ["init", "-q", "-b", branch]);
   git(dir, ["config", "user.email", "test@test.com"]);
   git(dir, ["config", "user.name", "Test"]);
@@ -32,7 +32,7 @@ test("init on a non-default branch name auto-detects it as integrationBranch", (
   try {
     const out = runInit(dir);
     assert.match(out, /detected current branch "trunk"/);
-    const cfg = readFileSync(join(dir, "claude-code-local-merge.config.mjs"), "utf8");
+    const cfg = readFileSync(join(dir, "claude-code-merge-queue.config.mjs"), "utf8");
     assert.match(cfg, /"integrationBranch": "trunk"/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -45,7 +45,7 @@ test("init on detached HEAD warns instead of silently defaulting to main", () =>
     git(dir, ["checkout", "-q", "--detach", "HEAD"]);
     const out = runInit(dir);
     assert.match(out, /Couldn't detect the current branch/);
-    const cfg = readFileSync(join(dir, "claude-code-local-merge.config.mjs"), "utf8");
+    const cfg = readFileSync(join(dir, "claude-code-merge-queue.config.mjs"), "utf8");
     // Still falls back to the DEFAULTS value, but now the user is told so.
     assert.match(cfg, /"integrationBranch": "main"/);
   } finally {
@@ -61,13 +61,13 @@ test("init wires land/sync/promote/preview scripts into package.json end-to-end,
     assert.match(out, /added "land", "sync", "promote", "preview", "preview:restore", "preland", "presync" to package\.json scripts/);
     const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
     assert.equal(pkg.scripts.test, "echo ok", "pre-existing script must survive");
-    assert.equal(pkg.scripts.land, "claude-code-local-merge land");
-    assert.equal(pkg.scripts.sync, "claude-code-local-merge sync");
-    assert.equal(pkg.scripts.promote, "claude-code-local-merge promote");
-    assert.equal(pkg.scripts.preview, "claude-code-local-merge preview");
-    assert.equal(pkg.scripts["preview:restore"], "claude-code-local-merge preview --restore");
-    assert.equal(pkg.scripts.preland, "node claude-code-local-merge-preflight.mjs land");
-    assert.equal(pkg.scripts.presync, "node claude-code-local-merge-preflight.mjs sync");
+    assert.equal(pkg.scripts.land, "claude-code-merge-queue land");
+    assert.equal(pkg.scripts.sync, "claude-code-merge-queue sync");
+    assert.equal(pkg.scripts.promote, "claude-code-merge-queue promote");
+    assert.equal(pkg.scripts.preview, "claude-code-merge-queue preview");
+    assert.equal(pkg.scripts["preview:restore"], "claude-code-merge-queue preview --restore");
+    assert.equal(pkg.scripts.preland, "node claude-code-merge-queue-preflight.mjs land");
+    assert.equal(pkg.scripts.presync, "node claude-code-merge-queue-preflight.mjs sync");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -77,7 +77,7 @@ test("Next steps only lists files actually written this run — not a static lis
   const dir = scratchRepo("main"); // no package.json — e.g. a non-Node repo
   try {
     const out = runInit(dir);
-    assert.match(out, /Commit what it wrote — claude-code-local-merge\.config\.mjs, CLAUDE\.md, \.claude\/settings\.json/);
+    assert.match(out, /Commit what it wrote — claude-code-merge-queue\.config\.mjs, CLAUDE\.md, \.claude\/settings\.json/);
     assert.doesNotMatch(out, /and package\.json/, "nothing was written to package.json — must not tell you to commit it");
   } finally {
     rmSync(dir, { recursive: true, force: true });

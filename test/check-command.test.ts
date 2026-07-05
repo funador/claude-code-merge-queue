@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { detectCheckCommand, detectPackageManager, runCheckCommand } from "../src/lib/check-command.js";
 
 test("detectCheckCommand finds nothing without a package.json", () => {
-  const dir = mkdtempSync(join(tmpdir(), "claude-code-local-merge-detect-"));
+  const dir = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-detect-"));
   try {
     assert.equal(detectCheckCommand(dir), null);
   } finally {
@@ -15,7 +15,7 @@ test("detectCheckCommand finds nothing without a package.json", () => {
 });
 
 test("detectCheckCommand prefers check:push over test", () => {
-  const dir = mkdtempSync(join(tmpdir(), "claude-code-local-merge-detect-"));
+  const dir = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-detect-"));
   try {
     writeFileSync(join(dir, "package.json"), JSON.stringify({ scripts: { test: "mocha", "check:push": "node scripts/check.mjs" } }));
     assert.equal(detectCheckCommand(dir), "npm run check:push");
@@ -25,7 +25,7 @@ test("detectCheckCommand prefers check:push over test", () => {
 });
 
 test("detectCheckCommand falls back to test when nothing else is present", () => {
-  const dir = mkdtempSync(join(tmpdir(), "claude-code-local-merge-detect-"));
+  const dir = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-detect-"));
   try {
     writeFileSync(join(dir, "package.json"), JSON.stringify({ scripts: { test: "mocha" } }));
     assert.equal(detectCheckCommand(dir), "npm run test");
@@ -35,7 +35,7 @@ test("detectCheckCommand falls back to test when nothing else is present", () =>
 });
 
 test("detectPackageManager defaults to npm with no lockfile", () => {
-  const dir = mkdtempSync(join(tmpdir(), "claude-code-local-merge-pm-"));
+  const dir = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-pm-"));
   try {
     assert.equal(detectPackageManager(dir), "npm");
   } finally {
@@ -50,7 +50,7 @@ test("detectPackageManager reads pnpm-lock.yaml, yarn.lock, and bun.lock", () =>
     ["bun.lock", "bun"],
   ];
   for (const [lockfile, expected] of cases) {
-    const dir = mkdtempSync(join(tmpdir(), "claude-code-local-merge-pm-"));
+    const dir = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-pm-"));
     try {
       writeFileSync(join(dir, lockfile), "");
       assert.equal(detectPackageManager(dir), expected);
@@ -61,7 +61,7 @@ test("detectPackageManager reads pnpm-lock.yaml, yarn.lock, and bun.lock", () =>
 });
 
 test("detectCheckCommand uses the project's actual package manager, not a hardcoded npm", () => {
-  const dir = mkdtempSync(join(tmpdir(), "claude-code-local-merge-detect-"));
+  const dir = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-detect-"));
   try {
     writeFileSync(join(dir, "pnpm-lock.yaml"), "");
     writeFileSync(join(dir, "package.json"), JSON.stringify({ scripts: { check: "turbo run lint" } }));
@@ -85,7 +85,7 @@ test("runCheckCommand propagates the command's real exit code", () => {
 });
 
 test("runCheckCommand always runs from `root`, regardless of the caller's own cwd", () => {
-  const dir = mkdtempSync(join(tmpdir(), "claude-code-local-merge-checkcwd-"));
+  const dir = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-checkcwd-"));
   const startCwd = process.cwd();
   try {
     // A script whose success depends on running from `dir` specifically —

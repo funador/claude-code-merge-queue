@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const CLI = resolve(fileURLToPath(import.meta.url), "..", "..", "dist", "bin", "claude-code-local-merge.js");
+const CLI = resolve(fileURLToPath(import.meta.url), "..", "..", "dist", "bin", "claude-code-merge-queue.js");
 const WORKER = fileURLToPath(new URL("./helpers/lock-worker-in-dir.ts", import.meta.url));
 
 function git(cwd: string, args: string[]): string {
@@ -30,7 +30,7 @@ async function pollUntil(check: () => boolean, description: string, timeoutMs = 
 }
 
 function makeRepoWithLane(): { base: string; lane: string } {
-  const base = mkdtempSync(join(tmpdir(), "claude-code-local-merge-land-"));
+  const base = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-land-"));
   const remote = join(base, "remote.git");
   const mainTop = join(base, "main");
   execFileSync("git", ["init", "--quiet", "--bare", remote]);
@@ -39,7 +39,7 @@ function makeRepoWithLane(): { base: string; lane: string } {
   git(mainTop, ["config", "user.name", "Test"]);
   git(mainTop, ["checkout", "-q", "-b", "dev"]);
   writeFileSync(
-    join(mainTop, "claude-code-local-merge.config.mjs"),
+    join(mainTop, "claude-code-merge-queue.config.mjs"),
     `export default { branchPrefix: "lane/", worktreeSuffix: "-lane-", portBase: 3000, integrationBranch: "dev", productionBranch: null, protectedBranches: [], regenerableFiles: ["generated.txt"], symlinks: [], buildOutputDirs: [], checkCommand: null, checksRequired: false };\n`,
   );
   // Committed (not just written) so a later modification shows up as a

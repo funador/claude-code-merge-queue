@@ -4,7 +4,7 @@
  * doesn't compete with that, it plugs into it. A WorktreeCreate hook
  * "replaces default git behavior entirely" (Claude Code's own docs), so
  * this script is responsible for actually creating the worktree; what it
- * adds on top of the native flow is Claude Code Local Merge's numbered-lane convention
+ * adds on top of the native flow is Claude Code Merge Queue's numbered-lane convention
  * and a `node_modules` SYMLINK instead of a copy — Claude Code's own
  * `.worktreeinclude` mechanism copies gitignored files in, which is fine
  * for a `.env` file and genuinely expensive for `node_modules`.
@@ -27,7 +27,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, symlinkSync } from "node:fs";
 import { dirname, join, basename, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadConfig, hasConfig, DEFAULTS, type ClaudeCodeLocalMergeConfig } from "../lib/config.js";
+import { loadConfig, hasConfig, DEFAULTS, type ClaudeCodeMergeQueueConfig } from "../lib/config.js";
 import { resolveMainCheckout } from "../lib/main-checkout.js";
 
 interface HookInput {
@@ -73,7 +73,7 @@ function tryGit(args: string[], cwd: string): { ok: boolean; out: string } {
  * message on failure — the caller turns that into the hook's stderr +
  * non-zero exit.
  */
-export function createLane(mainTop: string, cfg: ClaudeCodeLocalMergeConfig): { wt: string; branch: string; lane: number } {
+export function createLane(mainTop: string, cfg: ClaudeCodeMergeQueueConfig): { wt: string; branch: string; lane: number } {
   // Clean up administrative entries for worktrees whose directories are
   // already gone (e.g. someone `rm -rf`'d one instead of `git worktree
   // remove`) so reusing that lane number's branch name doesn't fail with
@@ -99,7 +99,7 @@ export function createLane(mainTop: string, cfg: ClaudeCodeLocalMergeConfig): { 
     // reading origin directly instead can be *behind* local HEAD (a commit
     // made here but not yet pushed) and silently drop it from every new
     // lane. That's not a hypothetical: it breaks the literal Quickstart —
-    // `init` writes claude-code-local-merge.config.mjs/CLAUDE.md/.claude locally, and the
+    // `init` writes claude-code-merge-queue.config.mjs/CLAUDE.md/.claude locally, and the
     // very first lane created before that commit is pushed anywhere would
     // otherwise come up with none of it.
     let add;
@@ -132,14 +132,14 @@ export function createLane(mainTop: string, cfg: ClaudeCodeLocalMergeConfig): { 
   }
 }
 
-// `.claude/settings.json` invokes this hook via `npx claude-code-local-merge hook
+// `.claude/settings.json` invokes this hook via `npx claude-code-merge-queue hook
 // worktree-create` rather than a project script, precisely because a raw
 // hook command has no `node_modules/.bin` on its PATH the way `npm run`
 // does — npx's own directory-walking local resolution is what makes that
 // work at all. The problem: npx treats a package it can't resolve locally as
 // license to silently fetch an ephemeral, unpinned copy from the registry
 // and run *that* instead of failing — which is exactly what happens when the
-// host project's own install of claude-code-local-merge is missing or mid-upgrade (npm
+// host project's own install of claude-code-merge-queue is missing or mid-upgrade (npm
 // removes the old version's files before extracting the new one; anything
 // that interrupts that leaves precisely this state). That fallback ran
 // silently for long enough in production to block two lanes from landing
@@ -152,14 +152,14 @@ export function isEphemeralNpxCopy(selfPath: string): boolean {
 }
 
 // The guard above only makes sense for a host project that's an npm project
-// with claude-code-local-merge as a real dependency — hola, say. A non-Node host repo
+// with claude-code-merge-queue as a real dependency — hola, say. A non-Node host repo
 // (a Haskell/Lua/Rust/whatever project with no package.json at all) has
-// nowhere to install claude-code-local-merge INTO; npx's ephemeral cache is the only way
-// it can ever run claude-code-local-merge commands, not a fallback masking a broken
+// nowhere to install claude-code-merge-queue INTO; npx's ephemeral cache is the only way
+// it can ever run claude-code-merge-queue commands, not a fallback masking a broken
 // local install. Only expect a local install — and therefore only treat
 // ephemeral execution as suspicious — when the host's own package.json
-// actually lists claude-code-local-merge as a dependency. No package.json, or one that
-// doesn't mention claude-code-local-merge: ephemeral execution is completely normal.
+// actually lists claude-code-merge-queue as a dependency. No package.json, or one that
+// doesn't mention claude-code-merge-queue: ephemeral execution is completely normal.
 export function expectsLocalInstall(mainTop: string): boolean {
   let pkg: { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
   try {
@@ -167,7 +167,7 @@ export function expectsLocalInstall(mainTop: string): boolean {
   } catch {
     return false; // no package.json, or unreadable/invalid — nothing "expected" to be there
   }
-  return Boolean(pkg.dependencies?.["claude-code-local-merge"] || pkg.devDependencies?.["claude-code-local-merge"]);
+  return Boolean(pkg.dependencies?.["claude-code-merge-queue"] || pkg.devDependencies?.["claude-code-merge-queue"]);
 }
 
 async function readStdin(): Promise<string> {
@@ -198,7 +198,7 @@ export async function runWorktreeCreateHook(): Promise<void> {
     process.stdout.write(wt + "\n");
     process.exit(0);
   } catch (err) {
-    process.stderr.write(`claude-code-local-merge worktree-create hook failed: ${err instanceof Error ? err.message : String(err)}\n`);
+    process.stderr.write(`claude-code-merge-queue worktree-create hook failed: ${err instanceof Error ? err.message : String(err)}\n`);
     process.exit(1);
   }
 }
