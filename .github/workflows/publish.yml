@@ -1,20 +1,33 @@
-name: Publish to npm
+name: Release
 
+# One-button release: from the Actions tab, pick this workflow, click
+# "Run workflow", choose the bump, and it does everything below.
 on:
-  release:
-    types: [published]   # fires when you publish a GitHub Release
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump
+        type: choice
+        required: true
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
 
 permissions:
-  contents: read
-  id-token: write        # required for OIDC (trusted publishing) + provenance
+  contents: write   # push the version commit + tag and create the GitHub Release
+  id-token: write   # OIDC trusted publishing + provenance
 
 jobs:
-  publish:
+  release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0   # full history so the release notes can diff prior tags
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
@@ -25,8 +38,29 @@ jobs:
 
       - run: npm ci
 
-      # Gate the publish on a green test run (pretest builds via tsc).
+      # Gate the release on a green test run (pretest builds via tsc).
       - run: npm test
 
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # Bumps package.json + package-lock.json, commits, creates a vX.Y.Z tag, and
+      # prints the new "vX.Y.Z" on stdout — capture that as the tag for later steps.
+      - name: Bump version and tag
+        id: bump
+        run: |
+          echo "tag=$(npm version ${{ inputs.bump }} -m "release: v%s")" >> "$GITHUB_OUTPUT"
+
+      - name: Push commit and tag
+        run: git push --follow-tags origin HEAD:main
+
       # No NODE_AUTH_TOKEN needed — OIDC handles auth, provenance is automatic.
-      - run: npm publish
+      - name: Publish to npm
+        run: npm publish
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ steps.bump.outputs.tag }}" --generate-notes
