@@ -13,7 +13,12 @@ const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 function makeScratchRepo(): string {
   const dir = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-wt-test-"));
-  execFileSync("git", ["init", "-q"], { cwd: dir });
+  // `-b main` + explicit identity keep this hermetic: a clean CI runner has no
+  // global user.name/email (git would fail with "empty ident name") and its
+  // init.defaultBranch is "master", not "main".
+  execFileSync("git", ["init", "-q", "-b", "main"], { cwd: dir });
+  execFileSync("git", ["config", "user.email", "test@test.com"], { cwd: dir });
+  execFileSync("git", ["config", "user.name", "Test"], { cwd: dir });
   execFileSync("git", ["commit", "-q", "--allow-empty", "-m", "init"], { cwd: dir });
   return dir;
 }

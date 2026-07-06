@@ -40,7 +40,11 @@ function makeRepoWithRemote(branch = "main"): { dir: string; remote: string } {
   const base = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-sync-"));
   const remote = join(base, "remote.git");
   const dir = join(base, "checkout");
-  execFileSync("git", ["init", "--quiet", "--bare", remote]);
+  // `-b main` sets the bare remote's HEAD to main. Without it a clean runner
+  // (init.defaultBranch=master) leaves HEAD pointing at a never-created master,
+  // so later re-clones (pushLockfileChange) can't check out main and
+  // `git push origin main` fails with "src refspec main does not match any".
+  execFileSync("git", ["init", "--quiet", "--bare", "-b", "main", remote]);
   execFileSync("git", ["clone", "--quiet", remote, dir]);
   git(dir, ["config", "user.email", "test@test.com"]);
   git(dir, ["config", "user.name", "Test"]);

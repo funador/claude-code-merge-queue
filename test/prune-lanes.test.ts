@@ -355,7 +355,10 @@ function spawnSyncHelper() {
 // without depending on any real process's name.
 function fakeLsofReporting(rowTemplate: string): { binDir: string } {
   const binDir = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-fake-lsof-"));
-  const script = `#!/bin/sh\ndir="\${*: -1}"\necho "COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME"\necho "${rowTemplate}" | sed "s|__TARGET__|\\$dir|"\n`;
+  // POSIX-only: grab the last arg with a loop, not `${*: -1}` (a bashism). On a
+  // Linux runner /bin/sh is dash, which errors "Bad substitution" on the latter,
+  // leaving the fake lsof to emit nothing — so a live lane reads as orphaned.
+  const script = `#!/bin/sh\ndir=\nfor a in "$@"; do dir="$a"; done\necho "COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME"\necho "${rowTemplate}" | sed "s|__TARGET__|\\$dir|"\n`;
   writeFileSync(join(binDir, "lsof"), script);
   chmodSync(join(binDir, "lsof"), 0o755);
   return { binDir };
