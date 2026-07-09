@@ -33,8 +33,10 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: npm
 
-      # Trusted publishing needs npm >= 11.5.1; setup-node may ship older.
-      - run: npm install -g npm@latest
+      # Trusted publishing needs npm >= 11.5.1; setup-node may ship older. Pinned
+      # to 11.5.1 (not @latest) because npm 11.6.x regressed provenance publishing
+      # with "Cannot find module 'sigstore'" — @latest fails `npm publish` outright.
+      - run: npm install -g npm@11.5.1
 
       - run: npm ci
 
