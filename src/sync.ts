@@ -24,8 +24,9 @@ import { detectPackageManager } from "./lib/check-command.js";
 const LOCK_RETRIES = 3;
 
 // Keyed by detectPackageManager's return value. bun writes either lockfile
-// name depending on version, so both are checked.
-const LOCKFILES: Record<string, string[]> = {
+// name depending on version, so both are checked. Exported so `land` can reuse
+// the same lockfile-name table for its lane-side reinstall (see land.ts).
+export const LOCKFILES: Record<string, string[]> = {
   npm: ["package-lock.json"],
   pnpm: ["pnpm-lock.yaml"],
   yarn: ["yarn.lock"],

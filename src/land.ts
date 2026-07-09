@@ -28,13 +28,58 @@
  *   Usage:  claude-code-merge-queue land   (run from a lane worktree, on its own branch)
  */
 import { execSync, spawnSync } from "node:child_process";
+import { existsSync, lstatSync } from "node:fs";
+import { join } from "node:path";
 import { createQueueLock } from "./lib/queue-lock.js";
 import { hasConfig, loadConfig } from "./lib/config.js";
 import { resolveMainCheckout } from "./lib/main-checkout.js";
 import { pruneLandedLanes, findOrphanedLanes } from "./lib/prune-lanes.js";
-import { sync } from "./sync.js";
+import { detectPackageManager } from "./lib/check-command.js";
+import { sync, LOCKFILES } from "./sync.js";
 
 const DIM = "\x1b[2m", RESET = "\x1b[0m", RED = "\x1b[31m", GREEN = "\x1b[32m", YELLOW = "\x1b[33m";
+
+/**
+ * A lane that broke its node_modules symlink to install its OWN new dependency
+ * (see the config's `symlinks`) runs on a REAL, isolated node_modules — one that
+ * `sync`'s shared-node_modules refresh (sync.ts) never touches. So when a rebase
+ * here pulls in a lockfile change from ANOTHER lane's dependency, this lane's
+ * checks run against stale deps and fail on a "cannot find module" that has
+ * nothing to do with the work being landed. Reinstall between the rebase and the
+ * push, so the checks (which run in the pre-push hook) see the rebased tree.
+ *
+ * A no-op unless BOTH hold:
+ *   - the rebase actually changed the lockfile (no dep churn → nothing to do), and
+ *   - node_modules is a real directory, NOT the shared symlink. A symlinked lane's
+ *     node_modules IS the main checkout's, which `sync` keeps current on every
+ *     land; installing "into" the symlink would mutate that shared tree out from
+ *     under every other lane, so those are covered by sync and skipped here.
+ *
+ * Isolated by construction, so — unlike sync's shared case — even a dependency
+ * REMOVAL is safe to apply without a guard: nothing else reads this tree.
+ */
+export function laneNeedsReinstall(root: string, preRebaseHead: string): boolean {
+  const pm = detectPackageManager(root);
+  const lockfiles = LOCKFILES[pm] ?? [];
+  const changed = execSync(`git diff --name-only ${preRebaseHead} HEAD`, { cwd: root, encoding: "utf8" }).split("\n");
+  if (!lockfiles.some((f) => changed.includes(f))) return false; // no dep churn in the rebase
+
+  // A symlinked node_modules IS the shared main-checkout tree (sync's job); only
+  // a lane with its OWN real node_modules needs — and is safe for — a local install.
+  const nodeModules = join(root, "node_modules");
+  if (existsSync(nodeModules) && lstatSync(nodeModules).isSymbolicLink()) return false;
+  return true;
+}
+
+function refreshLaneDepsAfterRebase(root: string, preRebaseHead: string): void {
+  if (!laneNeedsReinstall(root, preRebaseHead)) return;
+  const pm = detectPackageManager(root);
+  console.log(`${DIM}land: the rebase changed the lockfile and this lane has its own node_modules — running "${pm} install" so the checks see the rebased deps…${RESET}`);
+  const result = spawnSync(pm, ["install"], { cwd: root, stdio: "inherit" });
+  if (result.status !== 0) {
+    console.error(`${RED}land: "${pm} install" failed (exit ${result.status ?? 1}) — the checks below may fail on stale dependencies.${RESET}`);
+  }
+}
 
 export async function land(): Promise<void> {
   if (!hasConfig()) {
@@ -125,6 +170,10 @@ export async function land(): Promise<void> {
     console.log(`${DIM}fetching origin/${cfg.integrationBranch}…${RESET}`);
     execSync(`git fetch origin ${cfg.integrationBranch} --quiet`, { stdio: "inherit" });
 
+    // Captured before the rebase so we can tell, afterward, whether the rebase
+    // pulled in a lockfile change and this lane needs a reinstall (see
+    // refreshLaneDepsAfterRebase).
+    const preRebaseHead = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
     console.log(`${DIM}rebasing onto origin/${cfg.integrationBranch}…${RESET}`);
     const rebase = spawnSync("git", ["rebase", `origin/${cfg.integrationBranch}`], { stdio: "inherit" });
     if (rebase.status !== 0) {
@@ -133,6 +182,10 @@ export async function land(): Promise<void> {
       console.error(`Resolve it yourself (git fetch origin ${cfg.integrationBranch} && git rebase origin/${cfg.integrationBranch}), then re-run 'claude-code-merge-queue land'.`);
       exitCode = 1;
     } else {
+      // Between the rebase and the push (which is where the checks run): if the
+      // rebase pulled in another lane's dependency change, reinstall this lane's
+      // own node_modules first so the checks don't fail on stale deps.
+      refreshLaneDepsAfterRebase(process.cwd(), preRebaseHead);
       console.log(`${DIM}pushing to ${cfg.integrationBranch} (this is where your CI/checks hook runs)…${RESET}`);
       const push = spawnSync("git", ["push", "origin", `HEAD:${cfg.integrationBranch}`], {
         stdio: "inherit",
