@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const WORKER = fileURLToPath(new URL("./helpers/lock-worker.ts", import.meta.url));
+const STUCK_WAITER = fileURLToPath(new URL("./helpers/stuck-waiter.ts", import.meta.url));
 
 function spawnWorker(queueName: string, resultsFile: string, holdMs: number) {
   return spawn("node", ["--import", "tsx", WORKER, queueName, resultsFile, String(holdMs)], {
@@ -83,6 +84,52 @@ test("crash safety: a killed holder is reclaimed, not a permanent deadlock", asy
 
   const events = readEvents(resultsFile).filter((e) => e.pid === second.pid);
   assert.equal(events.length, 2, "second worker should have recorded both start and end");
+
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("stuck-holder visibility: a waiter re-announces a long-held (but alive) lock, never force-releasing it", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-lock-test-"));
+  const resultsFile = join(dir, "results.ndjson");
+  const waiterEvents = join(dir, "waiter-events.ndjson");
+  const queueName = `test-stuck-${process.pid}-${Date.now()}`;
+
+  // Holder sits on the lock far longer than the tiny stuckWarnAfterMs below —
+  // alive and well-behaved, just slow, standing in for a hung network call.
+  // Needs generous margin over the tiny stuckWarnAfterMs: under full-suite
+  // contention the waiter's own spawn + tsx-import overhead can itself take
+  // a second or more, so a short hold risks the lock already being free by
+  // the waiter's first poll — producing zero "still held" iterations and
+  // flaking the assertion below, even though the feature itself is fine.
+  const holder = spawnWorker(queueName, resultsFile, 3_000);
+  // Attach the exit listener immediately, not after awaiting the waiter below:
+  // ChildProcess's 'exit' event fires once and isn't replayed for listeners
+  // attached after the fact, so waiting on `waitExit(holder)` only once the
+  // waiter is done risks calling .on('exit', ...) after holder already exited
+  // — the promise would then never resolve. Capturing the promise now avoids
+  // the race regardless of how long the waiter takes to finish.
+  const holderExited = waitExit(holder);
+
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    if (existsSync(resultsFile) && readFileSync(resultsFile, "utf8").includes('"start"')) break;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  assert.ok(existsSync(resultsFile), "holder never acquired the lock");
+
+  const waiter = spawn("node", ["--import", "tsx", STUCK_WAITER, queueName, waiterEvents, "150"], { stdio: "inherit" });
+  await waitExit(waiter);
+  await holderExited;
+
+  const waiterLog = readFileSync(waiterEvents, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((l) => JSON.parse(l));
+
+  const warnings = waiterLog.filter((e) => e.event === "stuck-warn");
+  assert.ok(warnings.length > 0, "expected at least one stuck-holder warning while the holder was still alive");
+  assert.ok(warnings[0].holderElapsedMs >= 150, "warning should report a real elapsed time, not fire immediately");
+  assert.ok(waiterLog.some((e) => e.event === "acquired"), "waiter should still acquire the lock once the holder releases it — warnings never force a release");
 
   rmSync(dir, { recursive: true, force: true });
 });

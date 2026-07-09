@@ -33,6 +33,15 @@ import { execSync } from "node:child_process";
 // just poll granularity.
 const POLL_MS = 200;
 
+// A held-but-alive lock is never force-released (see tryTakeLock) — reclaiming
+// it from a live holder would recreate the exact race this lock exists to
+// prevent. But a holder that's alive and genuinely wedged (e.g. a hung network
+// call with no timeout) can otherwise block the whole queue silently, with no
+// signal beyond a human manually inspecting `ps`. Surface it instead: once a
+// holder has sat on the lock this long, keep re-announcing periodically so a
+// waiter can go look, without ever acting on the caller's behalf.
+const STUCK_HOLDER_WARN_AFTER_MS = 5 * 60 * 1000;
+
 interface LockHolder {
   pid: number;
   lane: string;
@@ -42,7 +51,10 @@ interface LockHolder {
 
 export interface AcquireOptions {
   label?: string;
-  onWait?: (info: { ahead: number; holder: LockHolder | null }) => void;
+  onWait?: (info: { ahead: number; holder: LockHolder | null; holderElapsedMs?: number }) => void;
+  // Overridable so tests don't have to wait out the real 5 minutes to exercise
+  // the stuck-holder path.
+  stuckWarnAfterMs?: number;
 }
 
 export interface QueueLock {
@@ -189,9 +201,16 @@ export function createQueueLock(queueName: string): QueueLock {
    * Wait for and take the lock. `onWait({ahead, holder})` fires whenever the
    * queue position changes, so callers can print progress.
    */
-  async function acquire({ label, onWait }: AcquireOptions = {}): Promise<void> {
+  async function acquire({ label, onWait, stuckWarnAfterMs = STUCK_HOLDER_WARN_AFTER_MS }: AcquireOptions = {}): Promise<void> {
     writeFileSync(TICKET_FILE, JSON.stringify({ pid: ME, lane, label, ts: TICKET_TS }));
     let announced = -1;
+    // Counts how many STUCK_HOLDER_WARN_AFTER_MS-sized intervals we've already
+    // warned about for the current holder, so a long wait re-announces every
+    // interval instead of spamming every poll. `holder.ts` (set when the lock
+    // was taken) is the shared clock, not "when this waiter first noticed" —
+    // every waiter agrees on the same elapsed time regardless of when it
+    // joined the queue.
+    let stuckWarnCount = 0;
     for (;;) {
       const queue = pruneDeadTickets();
       const ahead = queue.indexOf(TICKET_NAME); // 0 = our turn
@@ -212,10 +231,20 @@ export function createQueueLock(queueName: string): QueueLock {
 
       if (ahead > 0 && ahead !== announced) {
         announced = ahead;
+        stuckWarnCount = 0;
         onWait?.({ ahead, holder: null });
-      } else if (ahead <= 0 && holder && alive(holder.pid) && announced !== 0) {
-        announced = 0;
-        onWait?.({ ahead: 0, holder });
+      } else if (ahead <= 0 && holder && alive(holder.pid)) {
+        if (announced !== 0) {
+          announced = 0;
+          stuckWarnCount = 0;
+          onWait?.({ ahead: 0, holder });
+        }
+        const holderElapsedMs = Date.now() - holder.ts;
+        const dueWarns = Math.floor(holderElapsedMs / stuckWarnAfterMs);
+        if (dueWarns > stuckWarnCount) {
+          stuckWarnCount = dueWarns;
+          onWait?.({ ahead: 0, holder, holderElapsedMs });
+        }
       }
       await sleep(POLL_MS);
     }

@@ -88,6 +88,50 @@ interface WorktreeEntry {
   branch: string | null;
 }
 
+/** One `git status --porcelain` row, split into its status code and path. */
+interface DirtyEntry {
+  /** The XY status field — "??" for untracked, " M"/"MM"/… for tracked changes. */
+  xy: string;
+  file: string;
+}
+
+function parseDirty(wt: string): DirtyEntry[] {
+  return execFileSync("git", ["status", "--porcelain"], { cwd: wt, encoding: "utf8" })
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => ({ xy: line.slice(0, 2), file: line.slice(3).trim() }));
+}
+
+const isUntracked = (e: DirtyEntry): boolean => e.xy === "??";
+
+/**
+ * Does an untracked path match one of the configured throwaway patterns?
+ * A pattern names a dir or file that's session litter (e.g. "scratchpad/");
+ * it matches that exact path, the same path git reports for a wholly-untracked
+ * dir ("scratchpad/"), and anything nested under it ("scratchpad/run.log").
+ * Trailing "/" on the pattern is optional. Exported for unit testing.
+ */
+export function isDisposableUntracked(file: string, patterns: string[]): boolean {
+  return patterns.some((p) => {
+    const base = p.endsWith("/") ? p.slice(0, -1) : p;
+    return file === base || file === `${base}/` || file.startsWith(`${base}/`);
+  });
+}
+
+/**
+ * The dirty entries that represent REAL uncommitted work — everything left
+ * after discounting the two kinds of noise a landed, idle lane can safely be
+ * reclaimed over: tracked files a build tool regenerates (regenerableFiles)
+ * and untracked session litter the config marks throwaway (disposableUntracked).
+ * Empty means "nothing here is worth keeping"; non-empty means "leave this lane
+ * alone / surface it," and the entries are exactly what a human should look at.
+ */
+function realDirtyEntries(entries: DirtyEntry[], regenerable: Set<string>, disposable: string[]): DirtyEntry[] {
+  return entries.filter((e) =>
+    isUntracked(e) ? !isDisposableUntracked(e.file, disposable) : !regenerable.has(e.file),
+  );
+}
+
 // Best-effort realpath — a "current worktree" that's already gone (or was
 // never real to begin with) shouldn't crash the sweep over one path.
 function existsRealpath(path: string): string {
@@ -132,24 +176,38 @@ function listWorktrees(mainTop: string): WorktreeEntry[] {
 export interface OrphanedLane {
   path: string;
   branch: string;
+  /**
+   * Why it's flagged:
+   *   "unlanded-commits"  — real commits that never reached the integration
+   *                         branch (a session torn down mid-land).
+   *   "uncommitted-work"  — its branch DID land, but the tree still holds real
+   *                         uncommitted edits that were never even committed —
+   *                         invisible to the ahead-count check, silently lost
+   *                         if the lane is ever swept.
+   */
+  reason: "unlanded-commits" | "uncommitted-work";
+  /** Commits ahead of upstream (0 for the uncommitted-work case). */
   aheadCount: number;
+  /** Real uncommitted files, noise discounted (0 for the unlanded-commits case). */
+  dirtyCount: number;
 }
 
 /**
- * The mirror image of pruneLandedLanes' ancestor check: sibling lanes with
- * commits NOT on origin/<integrationBranch> AND no live Claude Code process
- * attached — real work that started landing (or never started), then the
- * session/terminal driving it went away (closed, crashed, torn down mid-check)
- * before it ever reached the branch. The crash-safe queue lock already
- * guarantees this can't jam OTHER lanes (a dead holder's lock is reclaimed by
- * PID-liveness) — but the abandoned lane itself was, until now, silent:
- * nothing else ever looks at a lane once its own session is gone. This never
- * touches or modifies a lane, only reports it, so a human can go finish
- * landing it or discard it.
+ * The mirror image of pruneLandedLanes' auto-resolve: sibling lanes that are
+ * NOT safe to reclaim and have no live Claude Code process attached, so a human
+ * should look at them. Two shapes, both otherwise silent once their session is
+ * gone:
+ *   - commits NOT on origin/<integrationBranch> (started landing, or never did,
+ *     then the session/terminal went away before it reached the branch); or
+ *   - a branch that already landed but whose tree still holds REAL uncommitted
+ *     work (noise discounted) — work that was never committed at all, which the
+ *     ancestor check alone can't see.
+ * Never touches or modifies a lane, only reports it — so a human can go finish
+ * landing/committing it or discard it.
  */
 export function findOrphanedLanes(
   mainTop: string,
-  cfg: Pick<ClaudeCodeMergeQueueConfig, "worktreeSuffix" | "branchPrefix" | "integrationBranch">,
+  cfg: Pick<ClaudeCodeMergeQueueConfig, "worktreeSuffix" | "branchPrefix" | "integrationBranch" | "regenerableFiles" | "disposableUntracked">,
   currentWorktree: string,
 ): OrphanedLane[] {
   const orphaned: OrphanedLane[] = [];
@@ -158,6 +216,8 @@ export function findOrphanedLanes(
   const laneDirPrefix = `${basename(mainTopReal)}${cfg.worktreeSuffix}`;
   const parent = dirname(mainTopReal);
   const upstream = `origin/${cfg.integrationBranch}`;
+  const regenerable = new Set(cfg.regenerableFiles);
+  const disposable = cfg.disposableUntracked;
 
   let worktrees: WorktreeEntry[];
   try {
@@ -181,11 +241,32 @@ export function findOrphanedLanes(
       continue; // upstream or branch not resolvable — nothing to report
     }
     const aheadCount = Number(aheadOut) || 0;
-    if (aheadCount === 0) continue; // fully landed (or a brand-new empty lane) — not orphaned
+
+    let reason: OrphanedLane["reason"] | null = null;
+    let dirtyCount = 0;
+    if (aheadCount > 0) {
+      reason = "unlanded-commits";
+    } else {
+      // Fully landed (or a brand-new empty lane): the only thing left to worry
+      // about is real uncommitted work that was never committed — the case the
+      // ancestor check is blind to. Noise (regenerable / disposable) doesn't
+      // count; that's exactly what pruneLandedLanes reclaims on its own.
+      let real: DirtyEntry[] = [];
+      try {
+        real = realDirtyEntries(parseDirty(wt), regenerable, disposable);
+      } catch {
+        continue; // can't read status — nothing to report
+      }
+      if (real.length > 0) {
+        reason = "uncommitted-work";
+        dirtyCount = real.length;
+      }
+    }
+    if (!reason) continue; // fully landed + clean (or only noise) — pruneLandedLanes' job, not ours
 
     if (hasLiveProcessInside(wt)) continue; // someone's actively driving it — not orphaned
 
-    orphaned.push({ path: wt, branch, aheadCount });
+    orphaned.push({ path: wt, branch, reason, aheadCount, dirtyCount });
   }
 
   return orphaned;
@@ -199,7 +280,7 @@ export function findOrphanedLanes(
  */
 export function pruneLandedLanes(
   mainTop: string,
-  cfg: Pick<ClaudeCodeMergeQueueConfig, "worktreeSuffix" | "branchPrefix" | "integrationBranch" | "regenerableFiles">,
+  cfg: Pick<ClaudeCodeMergeQueueConfig, "worktreeSuffix" | "branchPrefix" | "integrationBranch" | "regenerableFiles" | "disposableUntracked">,
   currentWorktree: string,
 ): string[] {
   const pruned: string[] = [];
@@ -212,6 +293,7 @@ export function pruneLandedLanes(
   const parent = dirname(mainTopReal);
   const upstream = `origin/${cfg.integrationBranch}`;
   const regenerable = new Set(cfg.regenerableFiles);
+  const disposable = cfg.disposableUntracked;
 
   let worktrees: WorktreeEntry[];
   try {
@@ -238,16 +320,20 @@ export function pruneLandedLanes(
 
     let removed = tryRemoveWorktree(mainTop, wt);
     if (!removed) {
-      // Blocked by dirty files? Only retry if EVERY one of them is a
-      // configured regenerable file — anything else is real uncommitted
-      // work, and this lane is left alone exactly as before.
-      const dirty = execFileSync("git", ["status", "--porcelain"], { cwd: wt, encoding: "utf8" })
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => line.slice(3).trim());
-      const blocking = dirty.filter((f) => !regenerable.has(f));
-      if (dirty.length > 0 && blocking.length === 0) {
-        execFileSync("git", ["checkout", "--", ...dirty], { cwd: wt, stdio: "ignore" });
+      // Blocked by dirty files? Only reclaim if EVERY one of them is noise —
+      // a build-tool-regenerated tracked file OR configured throwaway untracked
+      // litter. Anything else is real uncommitted work: leave this lane exactly
+      // as before (pruneLandedLanes never discards work to tidy up disk).
+      const entries = parseDirty(wt);
+      const real = realDirtyEntries(entries, regenerable, disposable);
+      if (entries.length > 0 && real.length === 0) {
+        // Tracked noise gets checked out back to its committed form; untracked
+        // litter never had a committed form to restore, so it's `git clean`'d
+        // instead — split because `git checkout --` errors on an untracked path.
+        const trackedNoise = entries.filter((e) => !isUntracked(e)).map((e) => e.file);
+        const untrackedNoise = entries.filter(isUntracked).map((e) => e.file);
+        if (trackedNoise.length > 0) execFileSync("git", ["checkout", "--", ...trackedNoise], { cwd: wt, stdio: "ignore" });
+        if (untrackedNoise.length > 0) execFileSync("git", ["clean", "-fdq", "--", ...untrackedNoise], { cwd: wt, stdio: "ignore" });
         removed = tryRemoveWorktree(mainTop, wt);
       }
     }

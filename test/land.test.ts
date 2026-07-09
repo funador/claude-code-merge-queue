@@ -56,6 +56,53 @@ function makeRepoWithLane(): { base: string; lane: string } {
   return { base, lane };
 }
 
+test("land refuses a lane with uncommitted TRACKED changes, up front, with a commit-first message — never reaching the queue", async () => {
+  const { base, lane } = makeRepoWithLane();
+  try {
+    // A real, uncommitted edit to a tracked file (not the regenerable one) —
+    // the exact "ran land before committing" mistake. This must fail fast with
+    // guidance, not the old misleading "rebase conflicted" after queuing.
+    writeFileSync(join(lane, "file.txt"), "edited but never committed\n");
+
+    const child = spawn("node", [CLI, "land"], { cwd: lane, stdio: ["ignore", "pipe", "pipe"] });
+    let stderr = "";
+    child.stderr.on("data", (d) => (stderr += String(d)));
+    const code = await waitExit(child);
+
+    assert.equal(code, 1, "must exit non-zero");
+    assert.match(stderr, /uncommitted changes — commit them before landing/i);
+    assert.match(stderr, /file\.txt/, "should show the offending file");
+    assert.doesNotMatch(stderr, /rebase/i, "must NOT mislead with a rebase/conflict message");
+    // The edit is left exactly as-is for the agent to commit — never discarded.
+    assert.equal(readFileSync(join(lane, "file.txt"), "utf8"), "edited but never committed\n");
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("land lets an untracked-only dirty tree through (a scratchpad/stray file never blocks a rebase)", async () => {
+  const { base, lane } = makeRepoWithLane();
+  try {
+    // Commit a real change so there's something to land, plus an UNTRACKED
+    // stray file — which must NOT trip the commit-first guard (untracked files
+    // don't block a rebase and are intentionally uncommitted litter).
+    writeFileSync(join(lane, "file.txt"), "committed change\n");
+    git(lane, ["add", "file.txt"]);
+    git(lane, ["commit", "-q", "-m", "real work"]);
+    writeFileSync(join(lane, "scratch.log"), "stray untracked litter\n");
+
+    const child = spawn("node", [CLI, "land"], { cwd: lane, stdio: ["ignore", "pipe", "pipe"] });
+    let stderr = "";
+    child.stderr.on("data", (d) => (stderr += String(d)));
+    const code = await waitExit(child);
+
+    assert.equal(code, 0, "untracked-only dirt must not block landing");
+    assert.doesNotMatch(stderr, /uncommitted changes — commit them/i);
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
 test("land discards a regenerable file that gets re-dirtied while waiting for the landing queue lock", async () => {
   // The exact bug this closes: land only ever checked for stray regenerable
   // dirt ONCE, before joining the queue. A build tool re-touching that same

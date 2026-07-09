@@ -42,6 +42,15 @@ export default {
   // regenerated file blocks a landing, and never think about it again.
   regenerableFiles: [],
 
+  // UNTRACKED session litter (a scratchpad of run logs, a temp dir) that's
+  // safe to `git clean` when reclaiming a lane whose branch already landed and
+  // that no live session is in. Without this, one stray untracked file pins an
+  // otherwise fully-landed, abandoned lane on disk forever (git worktree remove
+  // refuses on ANY untracked file). Empty by default — nothing untracked is
+  // ever deleted until you name it here; anything unlisted still blocks pruning
+  // and is surfaced as real uncommitted work. e.g. ["scratchpad/"].
+  disposableUntracked: [],
+
   // Git-ignored paths symlinked into every new lane so it needs no fresh
   // install and no copy of your secrets.
   symlinks: [".env", ".env.local", "node_modules"],

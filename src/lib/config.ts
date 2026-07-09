@@ -50,6 +50,21 @@ export interface ClaudeCodeMergeQueueConfig {
    */
   regenerableFiles: string[];
   /**
+   * UNTRACKED paths that are throwaway session litter (a `scratchpad/` of run
+   * logs, a temp working dir) rather than real work — safe to delete when
+   * reclaiming a lane whose branch already landed and that no live session is
+   * in. `git worktree remove` refuses on ANY untracked file, and a
+   * regenerable-file discard can't help (untracked files were never committed,
+   * so there's nothing to `git checkout` them back to) — so without this, one
+   * stray `scratchpad/` pins an otherwise fully-landed, abandoned lane on disk
+   * forever. Listing a path here is the standing authorization to `git clean`
+   * it during that reclaim; anything NOT listed still blocks pruning and gets
+   * surfaced as real uncommitted work. Empty by default — nothing untracked is
+   * ever deleted until you name it here. A trailing "/" (or not) both match a
+   * dir and everything under it.
+   */
+  disposableUntracked: string[];
+  /**
    * Git-ignored paths copied by reference (symlinked) into every new lane
    * so it never needs a fresh install or a copy of your secrets.
    */
@@ -92,6 +107,7 @@ export const DEFAULTS: ClaudeCodeMergeQueueConfig = {
   productionBranch: null,
   protectedBranches: [],
   regenerableFiles: [],
+  disposableUntracked: [],
   symlinks: [".env", ".env.local", "node_modules"],
   buildOutputDirs: ["dist", "build", ".next"],
   checkCommand: null,
@@ -126,6 +142,9 @@ export function validateConfig(cfg: ClaudeCodeMergeQueueConfig): string[] {
   }
   if (!Array.isArray(cfg.regenerableFiles) || !cfg.regenerableFiles.every((v) => typeof v === "string")) {
     problems.push("regenerableFiles must be an array of strings.");
+  }
+  if (!Array.isArray(cfg.disposableUntracked) || !cfg.disposableUntracked.every((v) => typeof v === "string")) {
+    problems.push("disposableUntracked must be an array of strings.");
   }
   if (!Array.isArray(cfg.symlinks) || !cfg.symlinks.every((v) => typeof v === "string")) {
     problems.push("symlinks must be an array of strings.");

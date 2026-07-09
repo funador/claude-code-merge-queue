@@ -4,7 +4,7 @@ import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isClaudeProcessRow, pruneLandedLanes, findOrphanedLanes } from "../src/lib/prune-lanes.js";
+import { isClaudeProcessRow, isDisposableUntracked, pruneLandedLanes, findOrphanedLanes } from "../src/lib/prune-lanes.js";
 import { DEFAULTS } from "../src/lib/config.js";
 
 function git(cwd: string, args: string[]): string {
@@ -34,7 +34,7 @@ function addLaneWorktree(mainTop: string, laneNum: number): string {
   return wt;
 }
 
-const cfg = { worktreeSuffix: DEFAULTS.worktreeSuffix, branchPrefix: DEFAULTS.branchPrefix, integrationBranch: "main", regenerableFiles: [] as string[] };
+const cfg = { worktreeSuffix: DEFAULTS.worktreeSuffix, branchPrefix: DEFAULTS.branchPrefix, integrationBranch: "main", regenerableFiles: [] as string[], disposableUntracked: [] as string[] };
 
 test("pruneLandedLanes removes a sibling lane whose branch is already fully merged upstream", () => {
   const { mainTop } = makeRepoWithRemote();
@@ -250,6 +250,122 @@ test("pruneLandedLanes discards regenerable-only dirty files and still prunes �
   } finally {
     rmSync(mainTop, { recursive: true, force: true });
   }
+});
+
+test("pruneLandedLanes reclaims a landed idle lane blocked only by disposable untracked litter — the scratchpad/ case that pinned lanes forever", () => {
+  const { mainTop } = makeRepoWithRemote();
+  const cfgDisposable = { ...cfg, disposableUntracked: ["scratchpad/"] };
+  try {
+    const wt1 = addLaneWorktree(mainTop, 1);
+    writeFileSync(join(wt1, "lane1.txt"), "done\n");
+    git(wt1, ["add", "-A"]);
+    git(wt1, ["commit", "-q", "-m", "lane 1 work"]);
+    git(wt1, ["push", "-q", "origin", "HEAD:main"]);
+    git(mainTop, ["fetch", "origin", "--quiet"]);
+    git(mainTop, ["merge", "--ff-only", "origin/main"]);
+    // Untracked session litter — never committed, so `git checkout --` can't
+    // restore it and `git worktree remove` refuses over it. Exactly what kept
+    // fully-landed, abandoned lanes stuck on disk.
+    execFileSync("mkdir", ["-p", join(wt1, "scratchpad")]);
+    writeFileSync(join(wt1, "scratchpad", "run.log"), "noise\n");
+    writeFileSync(join(wt1, "scratchpad", "tmp.mjs"), "// scratch\n");
+    const wt1Real = realpathSync(wt1);
+
+    const pruned = pruneLandedLanes(mainTop, cfgDisposable, "/some/other/currently-active-lane");
+
+    assert.deepEqual(pruned, [wt1Real], "disposable-only untracked litter must not block reclaiming a merged lane");
+    assert.ok(!existsSync(wt1));
+  } finally {
+    rmSync(mainTop, { recursive: true, force: true });
+  }
+});
+
+test("pruneLandedLanes leaves a landed lane alone when it holds NON-disposable untracked work", () => {
+  const { mainTop } = makeRepoWithRemote();
+  const cfgDisposable = { ...cfg, disposableUntracked: ["scratchpad/"] };
+  try {
+    const wt1 = addLaneWorktree(mainTop, 1);
+    writeFileSync(join(wt1, "lane1.txt"), "done\n");
+    git(wt1, ["add", "-A"]);
+    git(wt1, ["commit", "-q", "-m", "lane 1 work"]);
+    git(wt1, ["push", "-q", "origin", "HEAD:main"]);
+    git(mainTop, ["fetch", "origin", "--quiet"]);
+    git(mainTop, ["merge", "--ff-only", "origin/main"]);
+    // A brand-new source file someone wrote but never committed — real work,
+    // NOT in disposableUntracked. Must never be `git clean`'d away to tidy up.
+    writeFileSync(join(wt1, "new-feature.ts"), "export const real = 1;\n");
+    writeFileSync(join(wt1, "scratchpad-note.txt"), "also untracked but not under scratchpad/\n");
+
+    const pruned = pruneLandedLanes(mainTop, cfgDisposable, "/some/other/currently-active-lane");
+
+    assert.deepEqual(pruned, [], "any untracked file outside the disposable list is real work and must block pruning");
+    assert.ok(existsSync(wt1));
+    assert.ok(existsSync(join(wt1, "new-feature.ts")), "real untracked work must never be cleaned");
+  } finally {
+    rmSync(mainTop, { recursive: true, force: true });
+  }
+});
+
+test("findOrphanedLanes reports a LANDED lane that still holds real uncommitted work — the case the ahead-count check is blind to", () => {
+  const { mainTop } = makeRepoWithRemote();
+  const cfgDisposable = { ...cfg, regenerableFiles: ["next-env.d.ts"], disposableUntracked: ["scratchpad/"] };
+  try {
+    const wt1 = addLaneWorktree(mainTop, 1);
+    writeFileSync(join(wt1, "lane1.txt"), "done\n");
+    writeFileSync(join(wt1, "next-env.d.ts"), "// original\n"); // TRACKED, so a later rewrite reads as regenerable noise
+    git(wt1, ["add", "-A"]);
+    git(wt1, ["commit", "-q", "-m", "lane 1 work"]);
+    git(wt1, ["push", "-q", "origin", "HEAD:main"]); // its branch DID land — ahead count is 0
+    git(mainTop, ["fetch", "origin", "--quiet"]);
+    // Real uncommitted edits left behind, plus pure noise that must NOT count.
+    writeFileSync(join(wt1, "lane1.txt"), "edited but never committed\n");
+    writeFileSync(join(wt1, "next-env.d.ts"), "// regenerated noise\n");
+    execFileSync("mkdir", ["-p", join(wt1, "scratchpad")]);
+    writeFileSync(join(wt1, "scratchpad", "run.log"), "noise\n");
+
+    const orphaned = findOrphanedLanes(mainTop, cfgDisposable, "/some/other/currently-active-lane");
+
+    assert.equal(orphaned.length, 1);
+    assert.equal(orphaned[0]!.reason, "uncommitted-work");
+    assert.equal(orphaned[0]!.aheadCount, 0);
+    assert.equal(orphaned[0]!.dirtyCount, 1, "only the real edit counts — regenerable + disposable noise is discounted");
+    assert.ok(existsSync(wt1), "reporting must never touch the lane");
+  } finally {
+    rmSync(mainTop, { recursive: true, force: true });
+  }
+});
+
+test("findOrphanedLanes stays silent on a landed lane whose only dirt is noise (that's pruneLandedLanes' job)", () => {
+  const { mainTop } = makeRepoWithRemote();
+  const cfgDisposable = { ...cfg, regenerableFiles: ["next-env.d.ts"], disposableUntracked: ["scratchpad/"] };
+  try {
+    const wt1 = addLaneWorktree(mainTop, 1);
+    writeFileSync(join(wt1, "lane1.txt"), "done\n");
+    writeFileSync(join(wt1, "next-env.d.ts"), "// original\n");
+    git(wt1, ["add", "-A"]);
+    git(wt1, ["commit", "-q", "-m", "lane 1 work"]);
+    git(wt1, ["push", "-q", "origin", "HEAD:main"]);
+    git(mainTop, ["fetch", "origin", "--quiet"]);
+    writeFileSync(join(wt1, "next-env.d.ts"), "// regenerated\n"); // tracked regenerable noise
+    execFileSync("mkdir", ["-p", join(wt1, "scratchpad")]);
+    writeFileSync(join(wt1, "scratchpad", "run.log"), "noise\n"); // disposable untracked noise
+
+    const orphaned = findOrphanedLanes(mainTop, cfgDisposable, "/some/other/currently-active-lane");
+
+    assert.deepEqual(orphaned, [], "noise-only dirt is safe to auto-reclaim — never surface it as if it needed a human");
+  } finally {
+    rmSync(mainTop, { recursive: true, force: true });
+  }
+});
+
+test("isDisposableUntracked matches a dir pattern, its bare form, and nested paths — but nothing else", () => {
+  assert.equal(isDisposableUntracked("scratchpad/", ["scratchpad/"]), true, "git reports a wholly-untracked dir with a trailing slash");
+  assert.equal(isDisposableUntracked("scratchpad/run.log", ["scratchpad/"]), true, "nested files under the dir");
+  assert.equal(isDisposableUntracked("scratchpad", ["scratchpad/"]), true, "the bare dir name");
+  assert.equal(isDisposableUntracked("scratchpad/", ["scratchpad"]), true, "trailing slash on the pattern is optional");
+  assert.equal(isDisposableUntracked("scratchpad-notes.txt", ["scratchpad/"]), false, "a sibling that merely shares the prefix is NOT under the dir");
+  assert.equal(isDisposableUntracked("src/index.ts", ["scratchpad/"]), false, "unrelated real work never matches");
+  assert.equal(isDisposableUntracked("anything", []), false, "empty patterns match nothing");
 });
 
 test("pruneLandedLanes ignores worktrees that don't match this repo's lane naming pattern", () => {

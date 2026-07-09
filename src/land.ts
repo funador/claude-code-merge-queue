@@ -75,12 +75,42 @@ export async function land(): Promise<void> {
   }
   discardRegenerableDirt();
 
+  // land pushes COMMITTED work, not your working tree. If real changes remain
+  // after discarding regenerable noise, the agent ran `land` before committing
+  // — the single most common land failure. Catch it HERE, before taking a
+  // queue slot, with the actual fix, instead of letting the rebase fail later
+  // on git's cryptic "cannot rebase: you have unstaged changes" (which land
+  // used to mis-report as a merge conflict). Untracked files (a scratchpad,
+  // stray logs) don't block a rebase and are intentionally uncommitted, so
+  // they don't count — only tracked, uncommitted changes do.
+  const uncommitted = execSync("git status --porcelain", { encoding: "utf8" })
+    .split("\n")
+    .filter((l) => l && !l.startsWith("??"));
+  if (uncommitted.length > 0) {
+    console.error(`${RED}land: you have uncommitted changes — commit them before landing.${RESET}`);
+    console.error(
+      "land pushes committed work, not your working tree. Green checks aren't enough — commit (or stash) everything, then re-run 'claude-code-merge-queue land':",
+    );
+    console.error(uncommitted.map((l) => `${DIM}  ${l}${RESET}`).join("\n"));
+    process.exit(1);
+  }
+
   const lock = createQueueLock("land");
   await lock.acquire({
     label: branch,
-    onWait: ({ ahead, holder }) => {
+    onWait: ({ ahead, holder, holderElapsedMs }) => {
       if (ahead > 0) {
         console.log(`${DIM}[land-queue] ${branch}: waiting — ${ahead} landing${ahead === 1 ? "" : "s"} ahead…${RESET}`);
+      } else if (holder && holderElapsedMs !== undefined) {
+        // The lock is never force-released from a live holder (see queue-lock's
+        // tryTakeLock — reclaiming it would recreate the exact race the lock
+        // exists to prevent), so this is visibility only: a holder alive this
+        // long is unusual enough to be worth a human looking at the PID.
+        const mins = Math.round(holderElapsedMs / 60_000);
+        console.log(
+          `${YELLOW}⚠ [land-queue] ${branch}: '${holder.label ?? holder.lane}' (pid ${holder.pid}) has held the ` +
+            `lock for ~${mins}m — if it looks wedged, inspect PID ${holder.pid} and kill it if needed to free the queue.${RESET}`,
+        );
       } else if (holder) {
         console.log(`${DIM}[land-queue] ${branch}: next up — waiting for '${holder.label ?? holder.lane}' to finish landing…${RESET}`);
       }
@@ -137,16 +167,17 @@ export async function land(): Promise<void> {
             console.log(`${DIM}pruned ${pruned.length} already-landed lane${pruned.length === 1 ? "" : "s"}: ${names}${RESET}`);
           }
 
-          // Sibling lanes with real commits that never reached the integration
-          // branch and no one currently at the keyboard — a session/terminal
-          // that got torn down mid-land, or work that just never got landed.
-          // Report-only: never touched, never auto-landed for someone else.
+          // Sibling lanes that AREN'T safe to auto-reclaim and have no one at
+          // the keyboard — a session/terminal torn down mid-land, or work that
+          // was never even committed. Report-only: never touched, never
+          // auto-landed for someone else.
           const orphaned = findOrphanedLanes(mainTop, cfg, process.cwd());
           for (const o of orphaned) {
-            console.log(
-              `${YELLOW}⚠ ${o.branch} has ${o.aheadCount} commit${o.aheadCount === 1 ? "" : "s"} not on ` +
-                `${cfg.integrationBranch} and no active session (${o.path}) — looks orphaned. cd in and land it, or discard it.${RESET}`,
-            );
+            const msg =
+              o.reason === "unlanded-commits"
+                ? `has ${o.aheadCount} commit${o.aheadCount === 1 ? "" : "s"} not on ${cfg.integrationBranch} — cd in and land it, or discard it`
+                : `landed, but has ${o.dirtyCount} uncommitted file${o.dirtyCount === 1 ? "" : "s"} never committed — cd in and commit + land them, or discard them`;
+            console.log(`${YELLOW}⚠ ${o.branch} ${msg} and no active session (${o.path}).${RESET}`);
           }
         } catch {
           /* best-effort — never block a successful landing over cleanup */
