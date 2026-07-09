@@ -34,7 +34,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && chmod +x dist/bin/claude-code-merge-queue.js",
-    "prepare": "npm run build",
+    "prepare": "npm run build && (git config core.hooksPath .githooks 2>/dev/null || true)",
     "pretest": "npm run build",
     "test": "node --import tsx --test test/*.test.ts"
   },

@@ -53,7 +53,7 @@ jobs:
       - name: Bump version and tag
         id: bump
         run: |
-          echo "tag=$(npm version ${{ inputs.bump }} -m "release: v%s")" >> "$GITHUB_OUTPUT"
+          echo "tag=$(npm version ${{ inputs.bump }} -m "chore(release): v%s")" >> "$GITHUB_OUTPUT"
 
       - name: Push commit and tag
         run: git push --follow-tags origin HEAD:main
