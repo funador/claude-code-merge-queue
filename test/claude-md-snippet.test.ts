@@ -16,6 +16,13 @@ test("claudeMdSnippet tells the agent to commit before landing — the most comm
   assert.match(snippet, /pushes \*?committed\*? work, not your working tree/i);
 });
 
+test("claudeMdSnippet tells the agent to surface an orphaned lane to the human, never silently discard it", () => {
+  const snippet = claudeMdSnippet(DEFAULTS);
+  assert.match(snippet, /orphaned lane is a question for the human/i);
+  assert.match(snippet, /never quietly delete it/i);
+  assert.match(snippet, /claude-code-merge-queue reconcile/);
+});
+
 test("claudeMdSnippet includes the marker for idempotent re-appending", () => {
   assert.ok(claudeMdSnippet(DEFAULTS).startsWith(MARKER));
 });

@@ -18,7 +18,7 @@ import { claudeMdSnippet, MARKER } from "../lib/claude-md-snippet.js";
 import { detectCheckCommand, runCheckCommand } from "../lib/check-command.js";
 import { wireClaudeSettings, wireHuskyPrePush, ensureHooksPath, wirePackageJsonScripts, wirePreflightScript, PREFLIGHT_FILENAME } from "../lib/wire-hooks.js";
 import { resolveMainCheckout } from "../lib/main-checkout.js";
-import { pruneLandedLanes } from "../lib/prune-lanes.js";
+import { pruneLandedLanes, findOrphanedLanes, describeOrphanedLane } from "../lib/prune-lanes.js";
 
 const [, , command, ...rest] = process.argv;
 
@@ -250,6 +250,37 @@ async function main(): Promise<void> {
       }
       return;
     }
+    case "reconcile": {
+      // Read-only counterpart to the automatic post-land sweep: enumerate
+      // sibling lanes that need a HUMAN's judgment — real commits that never
+      // reached the integration branch, or uncommitted work in a lane with no
+      // live session — without touching any of them. `land` already surfaces
+      // these after every landing; this is the on-demand "show me what's
+      // stranded right now" entry point. It NEVER deletes anything (that's
+      // `prune`, and only ever for already-landed lanes) — Jesse chose
+      // notify-only here on purpose: reclaiming a lane with unlanded commits or
+      // uncommitted work is exactly the call that has to stay a human's.
+      const root = findRepoRoot();
+      if (!root || !hasConfig(root)) {
+        console.error("claude-code-merge-queue reconcile: no claude-code-merge-queue.config found — nothing to do.");
+        process.exit(0);
+      }
+      const cfg = await loadConfig(root);
+      const mainTop = resolveMainCheckout(process.cwd());
+      const orphaned = findOrphanedLanes(mainTop, cfg, process.cwd());
+      if (orphaned.length === 0) {
+        console.log("claude-code-merge-queue reconcile: no stranded lanes — every sibling lane is either landed and clean or actively in use.");
+        return;
+      }
+      const n = orphaned.length;
+      console.log(`claude-code-merge-queue reconcile: ${n} lane${n === 1 ? "" : "s"} need${n === 1 ? "s" : ""} a decision — none touched:`);
+      for (const o of orphaned) {
+        console.log(`  ⚠ ${describeOrphanedLane(o, cfg.integrationBranch)}`);
+      }
+      console.log("");
+      console.log("Surface these to the human and ask what to do with each — finish landing it, or discard it. Never silently delete a lane with unlanded commits or uncommitted work.");
+      return;
+    }
     case "preview":
       return runPreview(rest);
     case "build-lock": {
@@ -307,6 +338,7 @@ Usage:
   claude-code-merge-queue init                  write a starter claude-code-merge-queue.config.mjs
   claude-code-merge-queue land                  rebase + push this lane onto the integration branch (queued)
   claude-code-merge-queue sync                  fast-forward the MAIN checkout to its upstream
+  claude-code-merge-queue reconcile             list sibling lanes with unlanded/uncommitted work (read-only)
   claude-code-merge-queue promote               ship the integration branch to production (human-only — never script this)
   claude-code-merge-queue preview [--restore]   swap the MAIN checkout to this lane's working tree, or restore it
   claude-code-merge-queue build-lock -- <cmd>   run <cmd>, serialized across every lane

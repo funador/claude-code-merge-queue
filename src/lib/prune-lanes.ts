@@ -273,6 +273,21 @@ export function findOrphanedLanes(
 }
 
 /**
+ * One-line human guidance for an orphaned lane, WITHOUT a leading marker or
+ * trailing period — shared by `land`'s post-land call-to-action and the
+ * standalone `reconcile` command so the two read identically (the caller adds
+ * whatever `⚠`/punctuation its context wants). Says what's stranded and the two
+ * ways out (finish it, or discard it), never picking one — that's the human's call.
+ */
+export function describeOrphanedLane(o: OrphanedLane, integrationBranch: string): string {
+  const what =
+    o.reason === "unlanded-commits"
+      ? `has ${o.aheadCount} commit${o.aheadCount === 1 ? "" : "s"} not on ${integrationBranch} — cd in and land it, or discard it`
+      : `landed, but has ${o.dirtyCount} uncommitted file${o.dirtyCount === 1 ? "" : "s"} never committed — cd in and commit + land them, or discard them`;
+  return `${o.branch} ${what} and no active session (${o.path})`;
+}
+
+/**
  * Removes already-landed sibling lane worktrees. Returns the paths it
  * actually removed. Best-effort throughout — any failure for a given
  * worktree (dirty, diverged, busy) just skips that one; this never blocks

@@ -33,7 +33,7 @@ import { join } from "node:path";
 import { createQueueLock } from "./lib/queue-lock.js";
 import { hasConfig, loadConfig } from "./lib/config.js";
 import { resolveMainCheckout } from "./lib/main-checkout.js";
-import { pruneLandedLanes, findOrphanedLanes } from "./lib/prune-lanes.js";
+import { pruneLandedLanes, findOrphanedLanes, describeOrphanedLane } from "./lib/prune-lanes.js";
 import { detectPackageManager } from "./lib/check-command.js";
 import { sync, LOCKFILES } from "./sync.js";
 
@@ -226,11 +226,12 @@ export async function land(): Promise<void> {
           // auto-landed for someone else.
           const orphaned = findOrphanedLanes(mainTop, cfg, process.cwd());
           for (const o of orphaned) {
-            const msg =
-              o.reason === "unlanded-commits"
-                ? `has ${o.aheadCount} commit${o.aheadCount === 1 ? "" : "s"} not on ${cfg.integrationBranch} — cd in and land it, or discard it`
-                : `landed, but has ${o.dirtyCount} uncommitted file${o.dirtyCount === 1 ? "" : "s"} never committed — cd in and commit + land them, or discard them`;
-            console.log(`${YELLOW}⚠ ${o.branch} ${msg} and no active session (${o.path}).${RESET}`);
+            console.log(`${YELLOW}⚠ ${describeOrphanedLane(o, cfg.integrationBranch)}.${RESET}`);
+          }
+          if (orphaned.length > 0) {
+            // Don't let the agent bury this in the scrollback: it's a question
+            // for the human, not housekeeping to skip past (see the CLAUDE.md rule).
+            console.log(`${YELLOW}↑ surface ${orphaned.length === 1 ? "this lane" : "these lanes"} to the human and ask what to do — don't discard silently. (\`claude-code-merge-queue reconcile\` re-lists them.)${RESET}`);
           }
         } catch {
           /* best-effort — never block a successful landing over cleanup */
