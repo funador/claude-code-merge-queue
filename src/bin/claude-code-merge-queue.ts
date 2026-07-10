@@ -3,6 +3,8 @@
  * The claude-code-merge-queue CLI. Every subcommand reads claude-code-merge-queue.config from the
  * current repo — see src/lib/config.ts — so none of this is hardcoded to
  * any one project's branch names.
+ *
+ * Trusted-publisher binding re-verified after the repo was recreated (2026-07-10).
  */
 import { readFileSync } from "node:fs";
 import { land } from "../land.js";
