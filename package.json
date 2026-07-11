@@ -1,6 +1,6 @@
 {
   "name": "claude-code-merge-queue",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "The local, zero-cost merge queue for parallel Claude Code agents. Plugs into Claude Code's native worktree isolation; one build at a time, one landing at a time, zero races.",
   "type": "module",
   "license": "MIT",
