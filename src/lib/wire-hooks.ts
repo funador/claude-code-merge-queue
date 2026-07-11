@@ -9,19 +9,31 @@
  * file already exists, and doing nothing (safely) if our entry's already
  * there. Neither ever overwrites content that isn't ours.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, chmodSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, chmodSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HOOK_COMMAND = "npx claude-code-merge-queue hook worktree-create";
 const PRE_PUSH_MARKER = "claude-code-merge-queue check-push";
+// Shared verbatim between wireHuskyPrePush (writes it) and unwireHuskyPrePush
+// (finds it again to know exactly where its own appended block starts) — a
+// single source of truth so the two can never drift out of sync with each
+// other.
+const PRE_PUSH_APPEND_MARKER_LINE =
+  "# --- Claude Code Merge Queue (appended by `claude-code-merge-queue init`) — see node_modules/claude-code-merge-queue/hooks/pre-push for the full comments ---";
 export const PREFLIGHT_FILENAME = "claude-code-merge-queue-preflight.mjs";
 
 const PACKAGE_SCRIPTS: Record<string, string> = {
   land: "claude-code-merge-queue land",
   sync: "claude-code-merge-queue sync",
   promote: "claude-code-merge-queue promote",
+  // Read-only — safe to wire unconditionally alongside the rest. Without a
+  // script for it, `reconcile` only ever gets run by hand (rare) or noticed
+  // as a side effect of some OTHER lane's `land` scanning siblings, so a
+  // stranded lane can sit invisible for hours until another lane happens to
+  // land something.
+  reconcile: "claude-code-merge-queue reconcile",
   preview: "claude-code-merge-queue preview",
   "preview:restore": "claude-code-merge-queue preview --restore",
   // npm auto-runs "preland"/"presync" before "land"/"sync" — no wiring
@@ -112,8 +124,7 @@ export function wireHuskyPrePush(root: string): WireResult {
   const existing = readFileSync(path, "utf8");
   if (existing.includes(PRE_PUSH_MARKER)) return "already-wired";
 
-  const marker = "# --- Claude Code Merge Queue (appended by `claude-code-merge-queue init`) — see node_modules/claude-code-merge-queue/hooks/pre-push for the full comments ---";
-  appendFileSync(path, `\n${marker}\n${functionalSnippet(template)}`);
+  appendFileSync(path, `\n${PRE_PUSH_APPEND_MARKER_LINE}\n${functionalSnippet(template)}`);
   chmodSync(path, 0o755);
   return "merged";
 }
@@ -254,4 +265,114 @@ export function wirePackageJsonScripts(root: string): { result: ScriptsWireResul
 
   writeFileSync(path, JSON.stringify(pkg, null, 2) + "\n");
   return { result: "added", added };
+}
+
+// --- uninstall: the reverse of every wire* function above -----------------
+//
+// Same additive/idempotent philosophy, mirrored: only ever remove EXACTLY
+// what the matching wire* function would have written, verified by an exact
+// match against the current, live-computed value (not a stored flag from
+// whenever init ran) — never guess, never touch content that isn't
+// provably ours, and never fail loud over something that was never wired
+// in the first place ("not-found" is a normal, silent outcome).
+
+export type UnwireResult = "removed" | "not-found" | "unparseable";
+
+/** The reverse of wireClaudeSettings: drops only our own WorktreeCreate hook entry, leaving every other hook untouched. */
+export function unwireClaudeSettings(root: string): UnwireResult {
+  const path = join(root, ".claude", "settings.json");
+  if (!existsSync(path)) return "not-found";
+
+  let settings: ClaudeSettings;
+  try {
+    settings = JSON.parse(readFileSync(path, "utf8")) as ClaudeSettings;
+  } catch {
+    return "unparseable"; // leave it alone — don't guess at broken JSON
+  }
+
+  const groups = settings.hooks?.WorktreeCreate;
+  if (!groups) return "not-found";
+  const kept = groups.filter((group) => !group.hooks?.some((h) => h.command?.includes(HOOK_COMMAND)));
+  if (kept.length === groups.length) return "not-found"; // ours was never in there
+
+  if (kept.length > 0) {
+    settings.hooks!.WorktreeCreate = kept;
+  } else {
+    delete settings.hooks!.WorktreeCreate;
+    if (Object.keys(settings.hooks!).length === 0) delete settings.hooks;
+  }
+  writeFileSync(path, JSON.stringify(settings, null, 2) + "\n");
+  return "removed";
+}
+
+export type UnwirePrePushResult = "removed-file" | "removed-block" | "not-found";
+
+/**
+ * The reverse of wireHuskyPrePush. Two shapes to undo, mirroring wire's two
+ * outcomes:
+ *   - "created": the whole file is ours (byte-for-byte the shipped
+ *     template) — delete it entirely rather than leave a truncated husk.
+ *   - "merged": our block was appended, verbatim, after
+ *     PRE_PUSH_APPEND_MARKER_LINE — strip from that exact marker line to
+ *     EOF, leaving whatever pre-existed it completely untouched.
+ * Anything else (marker text present in some other shape — hand-edited
+ * since) is left alone rather than guessed at.
+ */
+export function unwireHuskyPrePush(root: string): UnwirePrePushResult {
+  const path = join(root, ".husky", "pre-push");
+  if (!existsSync(path)) return "not-found";
+
+  const existing = readFileSync(path, "utf8");
+  if (!existing.includes(PRE_PUSH_MARKER)) return "not-found";
+
+  if (existing === shippedPrePushTemplate()) {
+    rmSync(path);
+    return "removed-file";
+  }
+
+  const appended = `\n${PRE_PUSH_APPEND_MARKER_LINE}\n`;
+  const idx = existing.indexOf(appended);
+  if (idx === -1) return "not-found"; // marker present but not in the exact appended shape — don't guess
+
+  writeFileSync(path, existing.slice(0, idx).trimEnd() + "\n");
+  chmodSync(path, 0o755);
+  return "removed-block";
+}
+
+/** The reverse of wirePreflightScript. Always safe to delete outright — the file's own header says "do not hand-edit." */
+export function removePreflightScript(root: string): "removed" | "not-found" {
+  const path = join(root, PREFLIGHT_FILENAME);
+  if (!existsSync(path)) return "not-found";
+  rmSync(path);
+  return "removed";
+}
+
+export type UnwireScriptsResult = "removed" | "already-clean" | "unparseable" | "no-package-json";
+
+/** The reverse of wirePackageJsonScripts: removes a script only when its value is STILL EXACTLY what wiring would have written — a script you've since customized survives untouched, same as wiring never overwrites one. */
+export function unwirePackageJsonScripts(root: string): { result: UnwireScriptsResult; removed: string[] } {
+  const path = join(root, "package.json");
+  if (!existsSync(path)) return { result: "no-package-json", removed: [] };
+
+  let pkg: { scripts?: Record<string, string>; [key: string]: unknown };
+  try {
+    pkg = JSON.parse(readFileSync(path, "utf8")) as typeof pkg;
+  } catch {
+    return { result: "unparseable", removed: [] };
+  }
+
+  if (!pkg.scripts) return { result: "already-clean", removed: [] };
+
+  const removed: string[] = [];
+  for (const [name, command] of Object.entries(PACKAGE_SCRIPTS)) {
+    if (pkg.scripts[name] === command) {
+      delete pkg.scripts[name];
+      removed.push(name);
+    }
+  }
+
+  if (removed.length === 0) return { result: "already-clean", removed: [] };
+
+  writeFileSync(path, JSON.stringify(pkg, null, 2) + "\n");
+  return { result: "removed", removed };
 }

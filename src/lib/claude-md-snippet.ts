@@ -11,6 +11,8 @@
  * appending — once, idempotently, via MARKER — if one already exists) so
  * every session in the repo picks it up with zero extra setup per agent.
  */
+import { existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import type { ClaudeCodeMergeQueueConfig } from "./config.js";
 
 export const MARKER = "<!-- claude-code-merge-queue:workflow -->";
@@ -34,4 +36,45 @@ This repo uses [Claude Code Merge Queue](https://github.com/funador/claude-code-
 - **A surfaced orphaned lane is a question for the human — not scrollback to skip past.** After a landing (and on demand via \`claude-code-merge-queue reconcile\`) you may see a \`⚠\` sibling lane flagged with unlanded commits or uncommitted work and no active session. That's stranded work with nobody at the keyboard: don't ignore it, and never quietly delete it. Surface it to the human and ask what to do — finish landing it, or discard it — their call, not yours. Run \`claude-code-merge-queue reconcile\` anytime to list stranded lanes; it only reports, never touches them.
 ${promoteBlock}
 `;
+}
+
+export type RemoveSnippetResult = "removed" | "not-found" | "mismatch" | "no-file";
+
+/**
+ * The reverse of `init`'s CLAUDE.md write. Deliberately exact-match only —
+ * CLAUDE.md is hand-curated, high-trust prose a human reads and relies on,
+ * so this refuses to guess at boundaries the way a heading-based or
+ * marker-to-EOF strip would have to. It only acts when the live-regenerated
+ * snippet (from the CURRENT config) appears verbatim in one of the two exact
+ * shapes `init` can produce:
+ *   - the file IS the snippet (created fresh by init, nothing else in it) —
+ *     delete the file entirely rather than leave a bare header behind;
+ *   - the snippet was appended to a pre-existing file — strip exactly that
+ *     trailing substring, leaving everything before it untouched.
+ * Anything else (hand-edited since, or init ran under a different config
+ * than the one passed here) comes back "mismatch" — left completely alone
+ * for a human to remove by hand.
+ */
+export function removeClaudeMdSnippet(root: string, cfg: ClaudeCodeMergeQueueConfig): RemoveSnippetResult {
+  const path = join(root, "CLAUDE.md");
+  if (!existsSync(path)) return "no-file";
+
+  const content = readFileSync(path, "utf8");
+  if (!content.includes(MARKER)) return "not-found";
+
+  const snippet = claudeMdSnippet(cfg);
+  const createdTemplate = `# Project instructions for Claude Code\n\n${snippet}`;
+
+  if (content === createdTemplate) {
+    rmSync(path);
+    return "removed";
+  }
+
+  const appended = `\n${snippet}`;
+  if (content.endsWith(appended)) {
+    writeFileSync(path, content.slice(0, -appended.length).trimEnd() + "\n");
+    return "removed";
+  }
+
+  return "mismatch";
 }

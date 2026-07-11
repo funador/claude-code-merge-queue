@@ -58,12 +58,13 @@ test("init wires land/sync/promote/preview scripts into package.json end-to-end,
   writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "x", scripts: { test: "echo ok" } }));
   try {
     const out = runInit(dir);
-    assert.match(out, /added "land", "sync", "promote", "preview", "preview:restore", "preland", "presync" to package\.json scripts/);
+    assert.match(out, /added "land", "sync", "promote", "reconcile", "preview", "preview:restore", "preland", "presync" to package\.json scripts/);
     const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
     assert.equal(pkg.scripts.test, "echo ok", "pre-existing script must survive");
     assert.equal(pkg.scripts.land, "claude-code-merge-queue land");
     assert.equal(pkg.scripts.sync, "claude-code-merge-queue sync");
     assert.equal(pkg.scripts.promote, "claude-code-merge-queue promote");
+    assert.equal(pkg.scripts.reconcile, "claude-code-merge-queue reconcile");
     assert.equal(pkg.scripts.preview, "claude-code-merge-queue preview");
     assert.equal(pkg.scripts["preview:restore"], "claude-code-merge-queue preview --restore");
     assert.equal(pkg.scripts.preland, "node claude-code-merge-queue-preflight.mjs land");

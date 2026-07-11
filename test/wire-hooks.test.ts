@@ -4,7 +4,19 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { wireClaudeSettings, wireHuskyPrePush, ensureHooksPath, wirePackageJsonScripts, wirePreflightScript, preflightScriptContent, PREFLIGHT_FILENAME } from "../src/lib/wire-hooks.js";
+import {
+  wireClaudeSettings,
+  wireHuskyPrePush,
+  ensureHooksPath,
+  wirePackageJsonScripts,
+  wirePreflightScript,
+  preflightScriptContent,
+  PREFLIGHT_FILENAME,
+  unwireClaudeSettings,
+  unwireHuskyPrePush,
+  removePreflightScript,
+  unwirePackageJsonScripts,
+} from "../src/lib/wire-hooks.js";
 
 function scratchDir(): string {
   return mkdtempSync(join(tmpdir(), "claude-code-merge-queue-wire-"));
@@ -168,17 +180,18 @@ test("ensureHooksPath leaves a deliberate custom hooksPath alone", () => {
   }
 });
 
-test("wirePackageJsonScripts adds all seven scripts to a fresh package.json", () => {
+test("wirePackageJsonScripts adds all eight scripts to a fresh package.json", () => {
   const dir = scratchDir();
   try {
     writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "x" }));
     const { result, added } = wirePackageJsonScripts(dir);
     assert.equal(result, "added");
-    assert.deepEqual(added.sort(), ["land", "preland", "presync", "preview", "preview:restore", "promote", "sync"].sort());
+    assert.deepEqual(added.sort(), ["land", "preland", "presync", "preview", "preview:restore", "promote", "reconcile", "sync"].sort());
     const written = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
     assert.equal(written.scripts.land, "claude-code-merge-queue land");
     assert.equal(written.scripts.sync, "claude-code-merge-queue sync");
     assert.equal(written.scripts.promote, "claude-code-merge-queue promote");
+    assert.equal(written.scripts.reconcile, "claude-code-merge-queue reconcile");
     assert.equal(written.scripts.preview, "claude-code-merge-queue preview");
     assert.equal(written.scripts["preview:restore"], "claude-code-merge-queue preview --restore");
     assert.equal(written.scripts.preland, `node ${PREFLIGHT_FILENAME} land`);
@@ -195,7 +208,7 @@ test("wirePackageJsonScripts never overwrites a script you've already customized
     const { result, added } = wirePackageJsonScripts(dir);
     assert.equal(result, "added");
     assert.ok(!added.includes("land"), "must not report an already-customized script as added");
-    assert.deepEqual(added.sort(), ["preland", "presync", "preview", "preview:restore", "promote", "sync"].sort());
+    assert.deepEqual(added.sort(), ["preland", "presync", "preview", "preview:restore", "promote", "reconcile", "sync"].sort());
     const written = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
     assert.equal(written.scripts.land, "npm run lint && claude-code-merge-queue land", "custom script must survive untouched");
   } finally {
@@ -291,6 +304,165 @@ test("the generated preflight script fails loud with an actionable rebase hint w
       assert.match(err.stderr, /'totally-nonexistent-binary' isn't resolvable/);
       assert.match(err.stderr, /git fetch origin dev && git rebase origin\/dev/);
     }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// --- unwire* (uninstall) ----------------------------------------------------
+
+test("unwireClaudeSettings removes only our WorktreeCreate entry, leaving other hooks and other WorktreeCreate entries alone", () => {
+  const dir = scratchDir();
+  try {
+    mkdirSync(join(dir, ".claude"));
+    writeFileSync(
+      join(dir, ".claude", "settings.json"),
+      JSON.stringify({
+        hooks: {
+          PreToolUse: [{ hooks: [{ type: "command", command: "echo hi" }] }],
+          WorktreeCreate: [
+            { hooks: [{ type: "command", command: "npx claude-code-merge-queue hook worktree-create" }] },
+            { hooks: [{ type: "command", command: "echo also-mine-but-not-ours" }] },
+          ],
+        },
+      }),
+    );
+    assert.equal(unwireClaudeSettings(dir), "removed");
+    const written = JSON.parse(readFileSync(join(dir, ".claude", "settings.json"), "utf8"));
+    assert.equal(written.hooks.PreToolUse[0].hooks[0].command, "echo hi", "unrelated hook must survive");
+    assert.equal(written.hooks.WorktreeCreate.length, 1, "only our own entry is removed");
+    assert.equal(written.hooks.WorktreeCreate[0].hooks[0].command, "echo also-mine-but-not-ours");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("unwireClaudeSettings drops the WorktreeCreate and hooks keys entirely once empty, instead of leaving stub {} behind", () => {
+  const dir = scratchDir();
+  try {
+    wireClaudeSettings(dir);
+    assert.equal(unwireClaudeSettings(dir), "removed");
+    const written = JSON.parse(readFileSync(join(dir, ".claude", "settings.json"), "utf8"));
+    assert.deepEqual(written, {});
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("unwireClaudeSettings reports not-found when there's nothing of ours to remove", () => {
+  const dir = scratchDir();
+  try {
+    assert.equal(unwireClaudeSettings(dir), "not-found");
+    mkdirSync(join(dir, ".claude"));
+    writeFileSync(join(dir, ".claude", "settings.json"), JSON.stringify({ hooks: { PreToolUse: [] } }));
+    assert.equal(unwireClaudeSettings(dir), "not-found");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("unwireClaudeSettings leaves unparseable JSON untouched", () => {
+  const dir = scratchDir();
+  try {
+    mkdirSync(join(dir, ".claude"));
+    writeFileSync(join(dir, ".claude", "settings.json"), "{ not valid json");
+    assert.equal(unwireClaudeSettings(dir), "unparseable");
+    assert.equal(readFileSync(join(dir, ".claude", "settings.json"), "utf8"), "{ not valid json");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("unwireHuskyPrePush deletes the file outright when wireHuskyPrePush created it from scratch", () => {
+  const dir = scratchDir();
+  try {
+    mkdirSync(join(dir, ".husky"));
+    wireHuskyPrePush(dir);
+    assert.equal(unwireHuskyPrePush(dir), "removed-file");
+    assert.ok(!existsSync(join(dir, ".husky", "pre-push")));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("unwireHuskyPrePush strips only the appended block, restoring the original custom hook byte-for-byte", () => {
+  const dir = scratchDir();
+  try {
+    mkdirSync(join(dir, ".husky"));
+    const original = "#!/usr/bin/env sh\necho custom logic\n";
+    writeFileSync(join(dir, ".husky", "pre-push"), original);
+    wireHuskyPrePush(dir);
+    assert.equal(unwireHuskyPrePush(dir), "removed-block");
+    assert.equal(readFileSync(join(dir, ".husky", "pre-push"), "utf8"), original);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("unwireHuskyPrePush reports not-found when there's no pre-push file, or none of ours in it", () => {
+  const dir = scratchDir();
+  try {
+    assert.equal(unwireHuskyPrePush(dir), "not-found");
+    mkdirSync(join(dir, ".husky"));
+    writeFileSync(join(dir, ".husky", "pre-push"), "#!/usr/bin/env sh\necho nothing to do with us\n");
+    assert.equal(unwireHuskyPrePush(dir), "not-found");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("removePreflightScript removes the file when present and reports not-found otherwise", () => {
+  const dir = scratchDir();
+  try {
+    assert.equal(removePreflightScript(dir), "not-found");
+    wirePreflightScript(dir, "dev");
+    assert.equal(removePreflightScript(dir), "removed");
+    assert.ok(!existsSync(join(dir, PREFLIGHT_FILENAME)));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("unwirePackageJsonScripts removes exactly what wirePackageJsonScripts wrote", () => {
+  const dir = scratchDir();
+  try {
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "x", scripts: { test: "echo ok" } }));
+    wirePackageJsonScripts(dir);
+    const { result, removed } = unwirePackageJsonScripts(dir);
+    assert.equal(result, "removed");
+    assert.deepEqual(removed.sort(), ["land", "preland", "presync", "preview", "preview:restore", "promote", "reconcile", "sync"].sort());
+    const written = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+    assert.equal(written.scripts.test, "echo ok", "pre-existing script must survive");
+    assert.ok(!("land" in written.scripts));
+    assert.ok(!("reconcile" in written.scripts));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("unwirePackageJsonScripts leaves a script you've customized since wiring completely alone", () => {
+  const dir = scratchDir();
+  try {
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "x" }));
+    wirePackageJsonScripts(dir);
+    const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+    pkg.scripts.land = "npm run lint && claude-code-merge-queue land";
+    writeFileSync(join(dir, "package.json"), JSON.stringify(pkg));
+
+    const { removed } = unwirePackageJsonScripts(dir);
+    assert.ok(!removed.includes("land"), "must not remove a script that no longer matches what wiring wrote");
+    const written = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+    assert.equal(written.scripts.land, "npm run lint && claude-code-merge-queue land");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("unwirePackageJsonScripts reports already-clean, not unparseable/no-package-json, on a normal run with nothing of ours left", () => {
+  const dir = scratchDir();
+  try {
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "x" }));
+    assert.deepEqual(unwirePackageJsonScripts(dir), { result: "already-clean", removed: [] });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

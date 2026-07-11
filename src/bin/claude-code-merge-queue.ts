@@ -12,13 +12,24 @@ import { sync } from "../sync.js";
 import { promote } from "../promote.js";
 import { runPreview } from "../preview.js";
 import { buildLock } from "../build-lock.js";
-import { findRepoRoot, hasConfig, loadConfig, detectCurrentBranch, DEFAULTS } from "../lib/config.js";
+import { findRepoRoot, hasConfig, loadConfig, detectCurrentBranch, configPath, DEFAULTS } from "../lib/config.js";
 import { checkPush, parseRefUpdates } from "../lib/check-push.js";
 import { runWorktreeCreateHook } from "../hooks/worktree-create.js";
 import { lanePort } from "../lib/lane-port.js";
-import { claudeMdSnippet, MARKER } from "../lib/claude-md-snippet.js";
+import { claudeMdSnippet, removeClaudeMdSnippet, MARKER } from "../lib/claude-md-snippet.js";
 import { detectCheckCommand, runCheckCommand } from "../lib/check-command.js";
-import { wireClaudeSettings, wireHuskyPrePush, ensureHooksPath, wirePackageJsonScripts, wirePreflightScript, PREFLIGHT_FILENAME } from "../lib/wire-hooks.js";
+import {
+  wireClaudeSettings,
+  wireHuskyPrePush,
+  ensureHooksPath,
+  wirePackageJsonScripts,
+  wirePreflightScript,
+  PREFLIGHT_FILENAME,
+  unwireClaudeSettings,
+  unwireHuskyPrePush,
+  removePreflightScript,
+  unwirePackageJsonScripts,
+} from "../lib/wire-hooks.js";
 import { resolveMainCheckout } from "../lib/main-checkout.js";
 import { pruneLandedLanes, findOrphanedLanes, describeOrphanedLane } from "../lib/prune-lanes.js";
 
@@ -176,7 +187,7 @@ export default ${JSON.stringify(generated, null, 2)};
       break;
     case "no-package-json":
       console.log("claude-code-merge-queue init: no package.json found — scripts NOT wired automatically.");
-      console.log('  Add "land"/"sync"/"promote"/"preview"/"preview:restore" -> "claude-code-merge-queue <name>", plus');
+      console.log('  Add "land"/"sync"/"promote"/"reconcile"/"preview"/"preview:restore" -> "claude-code-merge-queue <name>", plus');
       console.log(`  "preland"/"presync" -> "node ${PREFLIGHT_FILENAME} land"/"sync" yourself.`);
       break;
     case "unparseable":
@@ -195,10 +206,100 @@ export default ${JSON.stringify(generated, null, 2)};
   }
 }
 
+/**
+ * The reverse of `init`: undo exactly what it wired, and nothing else. Same
+ * safety posture throughout — every step below only removes content it can
+ * verify is still byte-for-byte what wiring would have produced; anything
+ * that's since been hand-edited or customized is left alone and called out
+ * for a human to deal with, never guessed at. `claude-code-merge-queue.config.mjs`
+ * itself is the last thing removed, since its presence is what turns
+ * Claude Code Merge Queue on for a repo — everything else is unwound while it's
+ * still there to read (removeClaudeMdSnippet needs the live config to
+ * regenerate the exact snippet text it's matching against).
+ */
+async function uninstall(): Promise<void> {
+  const root = findRepoRoot();
+  if (!root) {
+    console.error("claude-code-merge-queue uninstall: not inside a git repo.");
+    process.exit(1);
+  }
+  if (!hasConfig(root)) {
+    console.log("claude-code-merge-queue uninstall: no claude-code-merge-queue.config found — nothing to remove.");
+    return;
+  }
+  const cfg = await loadConfig(root);
+  const manual: string[] = [];
+
+  switch (removeClaudeMdSnippet(root, cfg)) {
+    case "removed":
+      console.log("claude-code-merge-queue uninstall: removed the Claude Code Merge Queue section from CLAUDE.md.");
+      break;
+    case "mismatch":
+      console.log("claude-code-merge-queue uninstall: CLAUDE.md has a Claude Code Merge Queue section that doesn't match what this config would generate (hand-edited, or written under a different config) — left untouched.");
+      manual.push("CLAUDE.md");
+      break;
+    case "not-found":
+    case "no-file":
+      break; // nothing of ours there to begin with
+  }
+
+  switch (unwireClaudeSettings(root)) {
+    case "removed":
+      console.log("claude-code-merge-queue uninstall: removed the WorktreeCreate hook from .claude/settings.json.");
+      break;
+    case "unparseable":
+      console.log("claude-code-merge-queue uninstall: .claude/settings.json isn't valid JSON — left untouched.");
+      manual.push(".claude/settings.json");
+      break;
+    case "not-found":
+      break;
+  }
+
+  switch (unwireHuskyPrePush(root)) {
+    case "removed-file":
+      console.log("claude-code-merge-queue uninstall: removed .husky/pre-push (it held only Claude Code Merge Queue's checks).");
+      break;
+    case "removed-block":
+      console.log("claude-code-merge-queue uninstall: removed Claude Code Merge Queue's checks from .husky/pre-push, leaving the rest of the file as it was.");
+      break;
+    case "not-found":
+      break;
+  }
+
+  if (removePreflightScript(root) === "removed") {
+    console.log(`claude-code-merge-queue uninstall: removed ${PREFLIGHT_FILENAME}.`);
+  }
+
+  const scriptsResult = unwirePackageJsonScripts(root);
+  if (scriptsResult.result === "removed") {
+    console.log(`claude-code-merge-queue uninstall: removed "${scriptsResult.removed.join('", "')}" from package.json scripts.`);
+  } else if (scriptsResult.result === "unparseable") {
+    console.log("claude-code-merge-queue uninstall: package.json isn't valid JSON — left untouched.");
+    manual.push("package.json");
+  }
+
+  const cfgPath = configPath(root);
+  if (cfgPath) {
+    const { rmSync } = await import("node:fs");
+    rmSync(cfgPath);
+    console.log(`claude-code-merge-queue uninstall: removed ${cfgPath.slice(root.length + 1)} — Claude Code Merge Queue is now OFF for this repo.`);
+  }
+
+  console.log("");
+  if (manual.length > 0) {
+    console.log(`Left untouched, needs your own look: ${manual.join(", ")}.`);
+    console.log("");
+  }
+  console.log("Last step, run it yourself: npm uninstall claude-code-merge-queue");
+  console.log("(not run automatically — this command doesn't remove its own currently-executing package from node_modules.)");
+}
+
 async function main(): Promise<void> {
   switch (command) {
     case "init":
       return init();
+    case "uninstall":
+      return uninstall();
     case "hook": {
       const sub = rest[0];
       if (sub === "worktree-create") return runWorktreeCreateHook();
@@ -338,6 +439,7 @@ async function main(): Promise<void> {
 
 Usage:
   claude-code-merge-queue init                  write a starter claude-code-merge-queue.config.mjs
+  claude-code-merge-queue uninstall             undo everything init wired (config, CLAUDE.md section, hooks, package.json scripts)
   claude-code-merge-queue land                  rebase + push this lane onto the integration branch (queued)
   claude-code-merge-queue sync                  fast-forward the MAIN checkout to its upstream
   claude-code-merge-queue reconcile             list sibling lanes with unlanded/uncommitted work (read-only)
