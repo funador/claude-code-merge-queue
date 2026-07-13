@@ -126,6 +126,17 @@ skips: if your tests hit a shared resource — a database, a queue, anything
 stateful — concurrent lanes need their own throwaway copy of it, and a
 crashed run's copy needs to clean itself up without anyone noticing it died.
 
+### 📦 Library exports
+
+The same primitives the CLI is built on are importable directly, for when
+your own scripts need to coordinate lanes around something the CLI doesn't
+already cover:
+
+| Import | What it's for |
+|---|---|
+| `claude-code-merge-queue/queue-lock` — `createQueueLock(name)` | The exact cross-worktree FIFO mutex `build-lock` and `land` use, under a name you choose. Reach for this when several lanes need to take turns on some *other* exclusive resource — e.g. a database's branch-provisioning API that only allows one create/delete at a time per project, so concurrent lanes queue locally instead of racing the provider and retrying its rejections. `acquire()`/`release()`, crash-safe with no timeouts (a dead holder's lock is reclaimed on the next poll). |
+| `claude-code-merge-queue/retry` — `retryTransient(fn, opts)` | Retry-with-backoff for the transient failures that show up specifically under concurrent lane load — a cold compute waking from autosuspend, a container that hasn't finished binding its port, a query hitting a database a split second before it's ready. Only retries what `isTransientNetworkError` (or your own `isTransient`) says is actually transient; application errors still fail fast. |
+
 ## ⚙️ Configuration
 
 Everything lives in one file — see

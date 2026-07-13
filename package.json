@@ -26,6 +26,10 @@
     "./retry": {
       "types": "./dist/lib/retry-transient.d.ts",
       "default": "./dist/lib/retry-transient.js"
+    },
+    "./queue-lock": {
+      "types": "./dist/lib/queue-lock.d.ts",
+      "default": "./dist/lib/queue-lock.js"
     }
   },
   "files": [
