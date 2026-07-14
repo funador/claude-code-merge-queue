@@ -29,13 +29,14 @@
  */
 import { execSync, spawnSync } from "node:child_process";
 import { existsSync, lstatSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { createQueueLock } from "./lib/queue-lock.js";
 import { hasConfig, loadConfig } from "./lib/config.js";
 import { resolveMainCheckout } from "./lib/main-checkout.js";
 import { pruneLandedLanes, findOrphanedLanes, describeOrphanedLane } from "./lib/prune-lanes.js";
 import { detectPackageManager } from "./lib/check-command.js";
 import { sync, LOCKFILES } from "./sync.js";
+import { recordLandRun, type LandOutcome, type LandRunPhases } from "./lib/land-metrics.js";
 
 const DIM = "\x1b[2m", RESET = "\x1b[0m", RED = "\x1b[31m", GREEN = "\x1b[32m", YELLOW = "\x1b[33m";
 
@@ -82,6 +83,7 @@ function refreshLaneDepsAfterRebase(root: string, preRebaseHead: string): void {
 }
 
 export async function land(): Promise<void> {
+  const invokeStart = Date.now(); // total latency, incl. the queue wait below
   if (!hasConfig()) {
     console.error("claude-code-merge-queue land: no claude-code-merge-queue.config found at the repo root. Run `claude-code-merge-queue init` first.");
     process.exit(1);
@@ -141,6 +143,7 @@ export async function land(): Promise<void> {
   }
 
   const lock = createQueueLock("land");
+  const queueWaitStart = Date.now();
   await lock.acquire({
     label: branch,
     onWait: ({ ahead, holder, holderElapsedMs }) => {
@@ -162,41 +165,64 @@ export async function land(): Promise<void> {
     },
   });
 
+  const queueWaitMs = Date.now() - queueWaitStart;
+  // Filled in as each phase completes; only recorded (see the finally block)
+  // once `outcome` is actually set — an unexpected exception before then
+  // leaves it unset, and this debugging log just skips that anomalous run
+  // rather than guessing at how it ended.
+  const phases: Partial<LandRunPhases> = { queueWaitMs };
+  let outcome: LandOutcome | undefined;
+  let landedCommit: string | null = null;
+
   let exitCode = 0;
   try {
     console.log(`${DIM}[land-queue] ${branch}: lock acquired — landing…${RESET}`);
     discardRegenerableDirt(); // re-check right before the rebase — see comment above
 
     console.log(`${DIM}fetching origin/${cfg.integrationBranch}…${RESET}`);
+    const fetchStart = Date.now();
     execSync(`git fetch origin ${cfg.integrationBranch} --quiet`, { stdio: "inherit" });
+    phases.fetchMs = Date.now() - fetchStart;
 
     // Captured before the rebase so we can tell, afterward, whether the rebase
     // pulled in a lockfile change and this lane needs a reinstall (see
     // refreshLaneDepsAfterRebase).
     const preRebaseHead = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
     console.log(`${DIM}rebasing onto origin/${cfg.integrationBranch}…${RESET}`);
+    const rebaseStart = Date.now();
     const rebase = spawnSync("git", ["rebase", `origin/${cfg.integrationBranch}`], { stdio: "inherit" });
+    phases.rebaseMs = Date.now() - rebaseStart;
     if (rebase.status !== 0) {
       spawnSync("git", ["rebase", "--abort"], { stdio: "ignore" });
       console.error(`\n${RED}land: rebase onto origin/${cfg.integrationBranch} conflicted — aborted, working tree left clean.${RESET}`);
       console.error(`Resolve it yourself (git fetch origin ${cfg.integrationBranch} && git rebase origin/${cfg.integrationBranch}), then re-run 'claude-code-merge-queue land'.`);
+      outcome = "rebase-conflict";
       exitCode = 1;
     } else {
       // Between the rebase and the push (which is where the checks run): if the
       // rebase pulled in another lane's dependency change, reinstall this lane's
       // own node_modules first so the checks don't fail on stale deps.
+      const needsReinstall = laneNeedsReinstall(process.cwd(), preRebaseHead);
+      const reinstallStart = Date.now();
       refreshLaneDepsAfterRebase(process.cwd(), preRebaseHead);
+      phases.reinstallMs = needsReinstall ? Date.now() - reinstallStart : null;
+
+      landedCommit = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
       console.log(`${DIM}pushing to ${cfg.integrationBranch} (this is where your CI/checks hook runs)…${RESET}`);
+      const pushStart = Date.now();
       const push = spawnSync("git", ["push", "origin", `HEAD:${cfg.integrationBranch}`], {
         stdio: "inherit",
         env: { ...process.env, CLAUDE_CODE_MERGE_QUEUE_LANDING: "1" },
       });
+      phases.pushMs = Date.now() - pushStart;
       if (push.status !== 0) {
         console.error(`\n${RED}land: push to ${cfg.integrationBranch} failed — see output above.${RESET}`);
         console.error(`Fix the failure, then re-run 'claude-code-merge-queue land'.`);
+        outcome = "push-failed";
         exitCode = 1;
       } else {
         console.log(`${GREEN}✓ ${branch} landed on ${cfg.integrationBranch}.${RESET}`);
+        outcome = "landed";
         // Landing isn't "done" until the checkout that actually serves your
         // dev server can see it — call sync in-process rather than shelling
         // back out to the CLI, so this doesn't depend on `claude-code-merge-queue` being
@@ -206,7 +232,9 @@ export async function land(): Promise<void> {
         // to do), so if this push just introduced or changed
         // claude-code-merge-queue.config.mjs itself, a fresh MAIN-side load would silently
         // fall back to DEFAULTS instead of the real config.
+        const syncStart = Date.now();
         exitCode = await sync(cfg);
+        phases.syncMs = Date.now() - syncStart;
 
         // Housekeeping, never a reason to fail this landing: sweep sibling
         // lanes whose OWN branch already made it upstream (nothing created
@@ -239,6 +267,24 @@ export async function land(): Promise<void> {
       }
     }
   } finally {
+    if (outcome) {
+      recordLandRun({
+        ts: new Date().toISOString(),
+        lane: basename(process.cwd()),
+        branch,
+        commit: landedCommit,
+        outcome,
+        totalMs: Date.now() - invokeStart,
+        phases: {
+          queueWaitMs: phases.queueWaitMs ?? 0,
+          fetchMs: phases.fetchMs ?? 0,
+          rebaseMs: phases.rebaseMs ?? 0,
+          reinstallMs: phases.reinstallMs ?? null,
+          pushMs: phases.pushMs ?? 0,
+          syncMs: phases.syncMs ?? null,
+        },
+      });
+    }
     lock.release();
   }
   process.exit(exitCode);

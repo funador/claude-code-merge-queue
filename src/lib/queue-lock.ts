@@ -64,7 +64,9 @@ export interface QueueLock {
   readonly held: boolean;
 }
 
-function repoKey(): string {
+// Exported for land-metrics.ts, which stores its rolling log keyed off the
+// same repo-scoped path so every worktree/lane of a repo shares one history.
+export function repoKey(): string {
   try {
     const commonDir = execSync("git rev-parse --git-common-dir", {
       encoding: "utf8",

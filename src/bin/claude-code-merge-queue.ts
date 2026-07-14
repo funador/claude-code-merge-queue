@@ -32,6 +32,7 @@ import {
 } from "../lib/wire-hooks.js";
 import { resolveMainCheckout } from "../lib/main-checkout.js";
 import { pruneLandedLanes, findOrphanedLanes, describeOrphanedLane } from "../lib/prune-lanes.js";
+import { readLandMetrics } from "../lib/land-metrics.js";
 
 const [, , command, ...rest] = process.argv;
 
@@ -384,6 +385,34 @@ async function main(): Promise<void> {
       console.log("Surface these to the human and ask what to do with each — finish landing it, or discard it. Never silently delete a lane with unlanded commits or uncommitted work.");
       return;
     }
+    case "land-history": {
+      // Debugging aid, not a correctness check: a rolling local log of the
+      // last 100 `land` runs' phase timings (queue wait, fetch, rebase,
+      // reinstall, push — which includes the pre-push hook's own checks —
+      // and sync), so a sudden slowdown can be lined up against `git log`
+      // instead of guessed at. Every worktree/lane of a repo shares the same
+      // log (see land-metrics.ts).
+      const json = rest.includes("--json");
+      const records = readLandMetrics();
+      if (json) {
+        console.log(JSON.stringify(records, null, 2));
+        return;
+      }
+      if (records.length === 0) {
+        console.log("claude-code-merge-queue land-history: no recorded land runs yet.");
+        return;
+      }
+      const fmt = (ms: number | null) => (ms === null ? "—" : `${(ms / 1000).toFixed(1)}s`);
+      console.log(
+        `${"when".padEnd(20)}${"lane".padEnd(12)}${"outcome".padEnd(16)}${"total".padEnd(8)}${"queue".padEnd(8)}${"fetch".padEnd(8)}${"rebase".padEnd(8)}${"install".padEnd(9)}${"push".padEnd(8)}${"sync".padEnd(8)}commit`,
+      );
+      for (const r of records) {
+        console.log(
+          `${r.ts.slice(0, 19).replace("T", " ").padEnd(20)}${r.lane.padEnd(12)}${r.outcome.padEnd(16)}${fmt(r.totalMs).padEnd(8)}${fmt(r.phases.queueWaitMs).padEnd(8)}${fmt(r.phases.fetchMs).padEnd(8)}${fmt(r.phases.rebaseMs).padEnd(8)}${fmt(r.phases.reinstallMs).padEnd(9)}${fmt(r.phases.pushMs).padEnd(8)}${fmt(r.phases.syncMs).padEnd(8)}${r.commit ? r.commit.slice(0, 8) : "—"}`,
+        );
+      }
+      return;
+    }
     case "preview":
       return runPreview(rest);
     case "build-lock": {
@@ -441,6 +470,7 @@ Usage:
   claude-code-merge-queue init                  write a starter claude-code-merge-queue.config.mjs
   claude-code-merge-queue uninstall             undo everything init wired (config, CLAUDE.md section, hooks, package.json scripts)
   claude-code-merge-queue land                  rebase + push this lane onto the integration branch (queued)
+  claude-code-merge-queue land-history [--json] show the last 100 land runs' phase timings (debugging aid)
   claude-code-merge-queue sync                  fast-forward the MAIN checkout to its upstream
   claude-code-merge-queue reconcile             list sibling lanes with unlanded/uncommitted work (read-only)
   claude-code-merge-queue promote               ship the integration branch to production (human-only — never script this)
