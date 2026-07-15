@@ -69,11 +69,21 @@ test("retryTransient honors a caller-supplied isTransient predicate", async () =
   assert.equal(calls, 2);
 });
 
-test("isTransientNetworkError matches connection-establishment failures", () => {
+test("isTransientNetworkError matches transient network-transport failures", () => {
   assert.ok(isTransientNetworkError(new TypeError("fetch failed")));
   assert.ok(isTransientNetworkError(new Error("connect ECONNRESET")));
   assert.ok(isTransientNetworkError(new Error("connect ECONNREFUSED 127.0.0.1:5432")));
   assert.ok(isTransientNetworkError(Object.assign(new Error("aborted"), { name: "AbortError" })));
+});
+
+// These strike AFTER the request reached the server (the response was lost, not
+// the request), so they match too — which is exactly why the retried operation
+// must be idempotent. See the contract on retryTransient / isTransientNetworkError.
+test("isTransientNetworkError matches maybe-committed mid-flight drops", () => {
+  assert.ok(isTransientNetworkError(new Error("socket hang up")));
+  assert.ok(isTransientNetworkError(new Error("Client network socket disconnected before secure TLS connection was established")));
+  assert.ok(isTransientNetworkError(new Error("write EPIPE")));
+  assert.ok(isTransientNetworkError(new Error("The other side closed the connection")));
 });
 
 test("isTransientNetworkError matches a wrapped cause, not just the top-level message", () => {
