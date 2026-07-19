@@ -16,7 +16,7 @@ import { findRepoRoot, hasConfig, loadConfig, detectCurrentBranch, configPath, D
 import { checkPush, parseRefUpdates } from "../lib/check-push.js";
 import { runWorktreeCreateHook } from "../hooks/worktree-create.js";
 import { lanePort } from "../lib/lane-port.js";
-import { claudeMdSnippet, removeClaudeMdSnippet, MARKER } from "../lib/claude-md-snippet.js";
+import { claudeMdSnippet, removeClaudeMdSnippet, replaceClaudeMdSnippet, MARKER, END_MARKER_PREFIX } from "../lib/claude-md-snippet.js";
 import { detectCheckCommand, runCheckCommand } from "../lib/check-command.js";
 import {
   wireClaudeSettings,
@@ -102,12 +102,30 @@ export default ${JSON.stringify(generated, null, 2)};
     writeFileSync(claudeMdPath, `# Project instructions for Claude Code\n\n${snippet}`);
     console.log(`claude-code-merge-queue init: wrote ${claudeMdPath}`);
     writtenFiles.push("CLAUDE.md");
-  } else if (!read(claudeMdPath, "utf8").includes(MARKER)) {
-    appendFileSync(claudeMdPath, `\n${snippet}`);
-    console.log(`claude-code-merge-queue init: appended the Claude Code Merge Queue workflow section to ${claudeMdPath}`);
-    writtenFiles.push("CLAUDE.md");
   } else {
-    console.log(`claude-code-merge-queue init: ${claudeMdPath} already has the Claude Code Merge Queue workflow section — leaving it alone.`);
+    const current = read(claudeMdPath, "utf8");
+    if (current.includes(MARKER) && current.includes(END_MARKER_PREFIX)) {
+      // Marker-delimited block already present: regenerate it in place so the
+      // workflow the agent reads always matches the installed version. Edits
+      // inside the markers are intentionally overwritten (the block carries a
+      // do-not-hand-edit notice); everything outside the markers is preserved.
+      const updated = replaceClaudeMdSnippet(current, snippet);
+      if (updated !== null && updated !== current) {
+        writeFileSync(claudeMdPath, updated);
+        console.log(`claude-code-merge-queue init: re-synced the Claude Code Merge Queue workflow section in ${claudeMdPath}.`);
+        writtenFiles.push("CLAUDE.md");
+      } else {
+        console.log(`claude-code-merge-queue init: ${claudeMdPath} workflow section already up to date — leaving it alone.`);
+      }
+    } else if (current.includes(MARKER)) {
+      // Legacy block written before the closing marker existed — we can't
+      // delimit its end without guessing, so leave it for a human to adopt.
+      console.log(`claude-code-merge-queue init: ${claudeMdPath} has a legacy workflow section with no closing marker — left untouched. Remove that block and re-run init to adopt the self-updating delimited version.`);
+    } else {
+      appendFileSync(claudeMdPath, `\n${snippet}`);
+      console.log(`claude-code-merge-queue init: appended the Claude Code Merge Queue workflow section to ${claudeMdPath}`);
+      writtenFiles.push("CLAUDE.md");
+    }
   }
 
   const claudeSettingsResult = wireClaudeSettings(root);
