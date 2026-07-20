@@ -97,6 +97,15 @@ export interface ClaudeCodeMergeQueueConfig {
    * choice, not a silent default.
    */
   checksRequired: boolean;
+  /**
+   * When true (the default), the generated CLAUDE.md workflow tells the agent
+   * to land a green, committed lane on its own, with no human sign-off — the
+   * autonomy the queue is built around. Set false for a review gate: the
+   * generated instruction becomes "propose the land and wait for a human."
+   * This only shapes the generated wording; it never gates `land` itself,
+   * which a human or script can always run.
+   */
+  autoLand: boolean;
 }
 
 export const DEFAULTS: ClaudeCodeMergeQueueConfig = {
@@ -112,6 +121,7 @@ export const DEFAULTS: ClaudeCodeMergeQueueConfig = {
   buildOutputDirs: ["dist", "build", ".next"],
   checkCommand: null,
   checksRequired: true,
+  autoLand: true,
 };
 
 /**
@@ -157,6 +167,9 @@ export function validateConfig(cfg: ClaudeCodeMergeQueueConfig): string[] {
   }
   if (typeof cfg.checksRequired !== "boolean") {
     problems.push("checksRequired must be a boolean.");
+  }
+  if (typeof cfg.autoLand !== "boolean") {
+    problems.push("autoLand must be a boolean.");
   }
   return problems;
 }

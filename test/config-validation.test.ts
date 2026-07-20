@@ -38,6 +38,12 @@ test("rejects a non-boolean checksRequired", () => {
   assert.ok(problems.some((p) => /checksRequired/.test(p)));
 });
 
+test("rejects a non-boolean autoLand", () => {
+  // @ts-expect-error deliberately malformed for the test
+  const problems = validateConfig({ ...DEFAULTS, autoLand: "yes" });
+  assert.ok(problems.some((p) => /autoLand/.test(p)));
+});
+
 test("accepts a valid two-stage config", () => {
   const problems = validateConfig({
     ...DEFAULTS,
