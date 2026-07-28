@@ -5,7 +5,7 @@ import { existsSync, mkdtempSync, readdirSync, realpathSync, rmSync, mkdirSync, 
 import { tmpdir } from "node:os";
 import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createLane, isEphemeralNpxCopy, expectsLocalInstall } from "../src/hooks/worktree-create.js";
+import { createLane, isEphemeralNpxCopy, expectsLocalInstall, assertSymlinkPathsDistinct } from "../src/hooks/worktree-create.js";
 import { DEFAULTS } from "../src/lib/config.js";
 
 const WORKER = fileURLToPath(new URL("./helpers/worktree-create-worker.ts", import.meta.url));
@@ -185,6 +185,14 @@ test("expectsLocalInstall is true only when the host's own package.json actually
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("assertSymlinkPathsDistinct throws when src and dest coincide — the last line of defense if lane-path math ever regresses into producing a self-referential symlink", () => {
+  assert.throws(() => assertSymlinkPathsDistinct("/repo/.claude/settings.local.json", "/repo/.claude/settings.local.json"), /refusing to symlink/);
+});
+
+test("assertSymlinkPathsDistinct is a silent no-op for the normal case of distinct lane and main-checkout paths", () => {
+  assert.doesNotThrow(() => assertSymlinkPathsDistinct("/repo/.env", "/repo-lane-1/.env"));
 });
 
 test("the hook refuses to run and fails loud when invoked from npx's ephemeral cache instead of the project's real install", async () => {

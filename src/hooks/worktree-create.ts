@@ -67,6 +67,29 @@ function tryGit(args: string[], cwd: string): { ok: boolean; out: string } {
 }
 
 
+// `dest` is always inside the freshly claimed `wt` (a "<repo><suffix><lane>"
+// sibling of `mainTop`), so today src and dest can never actually coincide —
+// verified by inspection, not just belief: if they did, the existsSync(src)
+// && !existsSync(dest) guard right above the call site would itself skip the
+// symlink either way, since equal paths always share the same existence
+// status. Still worth a hard, loud assertion right at the one place this
+// package ever calls symlinkSync: it's the only thing standing between a
+// future refactor of the lane-path math and silently reproducing a
+// self-referential symlink on the main checkout (which ELOOPs every read of
+// whatever file it targets) for every consumer of this package, not just
+// hola. Kept as a small, independently exported/testable predicate rather
+// than inlined, since the pathological input can't be produced through
+// createLane's own public surface to exercise it end-to-end.
+export function assertSymlinkPathsDistinct(src: string, dest: string): void {
+  if (src === dest) {
+    throw new Error(
+      `claude-code-merge-queue: refusing to symlink '${src}' to itself — a lane worktree's ` +
+        "path must never equal the main checkout's path. This should be impossible; if it fired, " +
+        "the lane-path resolution above this call has regressed.",
+    );
+  }
+}
+
 /**
  * Claim the lowest free lane, create its worktree, and symlink the
  * configured git-ignored paths into it. Throws with a human-readable
@@ -120,6 +143,7 @@ export function createLane(mainTop: string, cfg: ClaudeCodeMergeQueueConfig): { 
       const src = join(mainTop, rel);
       const dest = join(wt, rel);
       if (!existsSync(src) || existsSync(dest)) continue;
+      assertSymlinkPathsDistinct(src, dest);
       try {
         mkdirSync(dirname(dest), { recursive: true });
         symlinkSync(src, dest);
