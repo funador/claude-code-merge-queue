@@ -34,6 +34,22 @@ import { resolveMainCheckout } from "../lib/main-checkout.js";
 import { pruneLandedLanes, findOrphanedLanes, describeOrphanedLane } from "../lib/prune-lanes.js";
 import { readLandMetrics } from "../lib/land-metrics.js";
 
+// Ignore SIGHUP process-wide, before any subcommand runs. `land`/`build-lock`
+// are routinely invoked as a long-running BACKGROUNDED process (an AI coding
+// agent runs them detached from its own turn, expecting the work to keep
+// going regardless of what happens to whatever shell/session invoked it) —
+// exactly the `nohup` scenario. SIGHUP's default disposition is to terminate
+// the process, and it fires not just from a deliberate kill but from the
+// controlling terminal/session going away, which has nothing to do with
+// anyone wanting to abort a build or a land. Adding ANY listener (even a
+// no-op) overrides that default termination (Node semantics), so this alone
+// makes the whole CLI immune to a stray session hangup. SIGINT (Ctrl-C) and
+// SIGTERM (an explicit kill, a CI deadline) are NOT touched here — those are
+// genuine "someone wants this to stop" signals and keep their normal
+// behavior (build-lock.ts installs its own handler for those to also kill
+// the wrapped child's process group).
+process.on("SIGHUP", () => {});
+
 const [, , command, ...rest] = process.argv;
 
 async function readStdin(): Promise<string> {
