@@ -25,6 +25,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { hasConfig, loadConfig } from "./lib/config.js";
+import { dim, red, green, tag } from "./lib/colors.js";
 
 function git(args: string[], { allowFail = false } = {}): { ok: boolean; out: string } {
   try {
@@ -38,12 +39,12 @@ function git(args: string[], { allowFail = false } = {}): { ok: boolean; out: st
 
 export async function promote(): Promise<number> {
   if (!hasConfig()) {
-    console.error("claude-code-merge-queue promote: no claude-code-merge-queue.config found at the repo root.");
+    console.error(red("claude-code-merge-queue promote: no claude-code-merge-queue.config found at the repo root."));
     return 1;
   }
   const cfg = await loadConfig();
   if (!cfg.productionBranch) {
-    console.log(`claude-code-merge-queue promote: no productionBranch configured — '${cfg.integrationBranch}' already IS production. Nothing to do.`);
+    console.log(`${tag("promote")} ${dim(`no productionBranch configured — '${cfg.integrationBranch}' already IS production. Nothing to do.`)}`);
     return 0;
   }
   const { integrationBranch, productionBranch } = cfg;
@@ -53,12 +54,12 @@ export async function promote(): Promise<number> {
   const prod = git(["rev-parse", `origin/${productionBranch}`], { allowFail: true });
   const integ = git(["rev-parse", `origin/${integrationBranch}`], { allowFail: true });
   if (!prod.ok || !integ.ok) {
-    console.error(`claude-code-merge-queue promote: could not resolve origin/${productionBranch} or origin/${integrationBranch} — are both branches created and fetched?`);
+    console.error(red(`claude-code-merge-queue promote: could not resolve origin/${productionBranch} or origin/${integrationBranch} — are both branches created and fetched?`));
     return 1;
   }
 
   if (prod.out === integ.out) {
-    console.log(`claude-code-merge-queue promote: ${productionBranch} already at ${integrationBranch} (${integ.out.slice(0, 7)}) — nothing to ship.`);
+    console.log(`${tag("promote")} ${dim(`${productionBranch} already at ${integrationBranch} (${integ.out.slice(0, 7)}) — nothing to ship.`)}`);
     return 0;
   }
 
@@ -67,19 +68,21 @@ export async function promote(): Promise<number> {
   const ff = git(["merge-base", "--is-ancestor", `origin/${productionBranch}`, `origin/${integrationBranch}`], { allowFail: true });
   if (!ff.ok) {
     console.error(
-      `claude-code-merge-queue promote: origin/${productionBranch} has commits NOT on origin/${integrationBranch} — history has diverged.\n` +
-        `Someone pushed ${productionBranch} directly. Reconcile manually before promoting.\n` +
-        "Left untouched — refusing to force-push production.",
+      red(
+        `claude-code-merge-queue promote: origin/${productionBranch} has commits NOT on origin/${integrationBranch} — history has diverged.\n` +
+          `Someone pushed ${productionBranch} directly. Reconcile manually before promoting.\n` +
+          "Left untouched — refusing to force-push production.",
+      ),
     );
     return 1;
   }
 
   const push = git(["push", "--no-verify", "origin", `origin/${integrationBranch}:${productionBranch}`], { allowFail: true });
   if (!push.ok) {
-    console.error(`claude-code-merge-queue promote: push to ${productionBranch} FAILED — production NOT updated.\n${push.out}`);
+    console.error(red(`claude-code-merge-queue promote: push to ${productionBranch} FAILED — production NOT updated.\n${push.out}`));
     return 1;
   }
 
-  console.log(`claude-code-merge-queue promote: shipped ${integrationBranch} → ${productionBranch}  ${prod.out.slice(0, 7)} → ${integ.out.slice(0, 7)}`);
+  console.log(green(`✓ shipped ${integrationBranch} → ${productionBranch}  ${prod.out.slice(0, 7)} → ${integ.out.slice(0, 7)}`));
   return 0;
 }

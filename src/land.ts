@@ -37,8 +37,7 @@ import { pruneLandedLanes, findOrphanedLanes, describeOrphanedLane } from "./lib
 import { detectPackageManager } from "./lib/check-command.js";
 import { sync, LOCKFILES } from "./sync.js";
 import { recordLandRun, type LandOutcome, type LandRunPhases } from "./lib/land-metrics.js";
-
-const DIM = "\x1b[2m", RESET = "\x1b[0m", RED = "\x1b[31m", GREEN = "\x1b[32m", YELLOW = "\x1b[33m";
+import { dim, red, green, yellow } from "./lib/colors.js";
 
 /**
  * A lane that broke its node_modules symlink to install its OWN new dependency
@@ -75,24 +74,24 @@ export function laneNeedsReinstall(root: string, preRebaseHead: string): boolean
 function refreshLaneDepsAfterRebase(root: string, preRebaseHead: string): void {
   if (!laneNeedsReinstall(root, preRebaseHead)) return;
   const pm = detectPackageManager(root);
-  console.log(`${DIM}land: the rebase changed the lockfile and this lane has its own node_modules — running "${pm} install" so the checks see the rebased deps…${RESET}`);
+  console.log(dim(`land: the rebase changed the lockfile and this lane has its own node_modules — running "${pm} install" so the checks see the rebased deps…`));
   const result = spawnSync(pm, ["install"], { cwd: root, stdio: "inherit" });
   if (result.status !== 0) {
-    console.error(`${RED}land: "${pm} install" failed (exit ${result.status ?? 1}) — the checks below may fail on stale dependencies.${RESET}`);
+    console.error(red(`land: "${pm} install" failed (exit ${result.status ?? 1}) — the checks below may fail on stale dependencies.`));
   }
 }
 
 export async function land(): Promise<void> {
   const invokeStart = Date.now(); // total latency, incl. the queue wait below
   if (!hasConfig()) {
-    console.error("claude-code-merge-queue land: no claude-code-merge-queue.config found at the repo root. Run `claude-code-merge-queue init` first.");
+    console.error(red("claude-code-merge-queue land: no claude-code-merge-queue.config found at the repo root. Run `claude-code-merge-queue init` first."));
     process.exit(1);
   }
   const cfg = await loadConfig();
 
   const branch = execSync("git rev-parse --abbrev-ref HEAD", { encoding: "utf8" }).trim();
   if (branch === cfg.integrationBranch || cfg.protectedBranches.includes(branch) || branch === "HEAD") {
-    console.error(`claude-code-merge-queue land: refusing to run from '${branch}' — land is for lane branches only.`);
+    console.error(red(`claude-code-merge-queue land: refusing to run from '${branch}' — land is for lane branches only.`));
     process.exit(1);
   }
 
@@ -134,11 +133,11 @@ export async function land(): Promise<void> {
     .split("\n")
     .filter((l) => l && !l.startsWith("??"));
   if (uncommitted.length > 0) {
-    console.error(`${RED}land: you have uncommitted changes — commit them before landing.${RESET}`);
+    console.error(red("land: you have uncommitted changes — commit them before landing."));
     console.error(
       "land pushes committed work, not your working tree. Green checks aren't enough — commit (or stash) everything, then re-run 'claude-code-merge-queue land':",
     );
-    console.error(uncommitted.map((l) => `${DIM}  ${l}${RESET}`).join("\n"));
+    console.error(uncommitted.map((l) => dim(`  ${l}`)).join("\n"));
     process.exit(1);
   }
 
@@ -148,7 +147,7 @@ export async function land(): Promise<void> {
     label: branch,
     onWait: ({ ahead, holder, holderElapsedMs }) => {
       if (ahead > 0) {
-        console.log(`${DIM}[land-queue] ${branch}: waiting — ${ahead} landing${ahead === 1 ? "" : "s"} ahead…${RESET}`);
+        console.log(dim(`[land-queue] ${branch}: waiting — ${ahead} landing${ahead === 1 ? "" : "s"} ahead…`));
       } else if (holder && holderElapsedMs !== undefined) {
         // The lock is never force-released from a live holder (see queue-lock's
         // tryTakeLock — reclaiming it would recreate the exact race the lock
@@ -156,11 +155,13 @@ export async function land(): Promise<void> {
         // long is unusual enough to be worth a human looking at the PID.
         const mins = Math.round(holderElapsedMs / 60_000);
         console.log(
-          `${YELLOW}⚠ [land-queue] ${branch}: '${holder.label ?? holder.lane}' (pid ${holder.pid}) has held the ` +
-            `lock for ~${mins}m — if it looks wedged, inspect PID ${holder.pid} and kill it if needed to free the queue.${RESET}`,
+          yellow(
+            `⚠ [land-queue] ${branch}: '${holder.label ?? holder.lane}' (pid ${holder.pid}) has held the ` +
+              `lock for ~${mins}m — if it looks wedged, inspect PID ${holder.pid} and kill it if needed to free the queue.`,
+          ),
         );
       } else if (holder) {
-        console.log(`${DIM}[land-queue] ${branch}: next up — waiting for '${holder.label ?? holder.lane}' to finish landing…${RESET}`);
+        console.log(dim(`[land-queue] ${branch}: next up — waiting for '${holder.label ?? holder.lane}' to finish landing…`));
       }
     },
   });
@@ -176,10 +177,10 @@ export async function land(): Promise<void> {
 
   let exitCode = 0;
   try {
-    console.log(`${DIM}[land-queue] ${branch}: lock acquired — landing…${RESET}`);
+    console.log(dim(`[land-queue] ${branch}: lock acquired — landing…`));
     discardRegenerableDirt(); // re-check right before the rebase — see comment above
 
-    console.log(`${DIM}fetching origin/${cfg.integrationBranch}…${RESET}`);
+    console.log(dim(`fetching origin/${cfg.integrationBranch}…`));
     const fetchStart = Date.now();
     execSync(`git fetch origin ${cfg.integrationBranch} --quiet`, { stdio: "inherit" });
     phases.fetchMs = Date.now() - fetchStart;
@@ -188,13 +189,13 @@ export async function land(): Promise<void> {
     // pulled in a lockfile change and this lane needs a reinstall (see
     // refreshLaneDepsAfterRebase).
     const preRebaseHead = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
-    console.log(`${DIM}rebasing onto origin/${cfg.integrationBranch}…${RESET}`);
+    console.log(dim(`rebasing onto origin/${cfg.integrationBranch}…`));
     const rebaseStart = Date.now();
     const rebase = spawnSync("git", ["rebase", `origin/${cfg.integrationBranch}`], { stdio: "inherit" });
     phases.rebaseMs = Date.now() - rebaseStart;
     if (rebase.status !== 0) {
       spawnSync("git", ["rebase", "--abort"], { stdio: "ignore" });
-      console.error(`\n${RED}land: rebase onto origin/${cfg.integrationBranch} conflicted — aborted, working tree left clean.${RESET}`);
+      console.error("\n" + red(`land: rebase onto origin/${cfg.integrationBranch} conflicted — aborted, working tree left clean.`));
       console.error(`Resolve it yourself (git fetch origin ${cfg.integrationBranch} && git rebase origin/${cfg.integrationBranch}), then re-run 'claude-code-merge-queue land'.`);
       outcome = "rebase-conflict";
       exitCode = 1;
@@ -208,7 +209,7 @@ export async function land(): Promise<void> {
       phases.reinstallMs = needsReinstall ? Date.now() - reinstallStart : null;
 
       landedCommit = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
-      console.log(`${DIM}pushing to ${cfg.integrationBranch} (this is where your CI/checks hook runs)…${RESET}`);
+      console.log(dim(`pushing to ${cfg.integrationBranch} (this is where your CI/checks hook runs)…`));
       const pushStart = Date.now();
       const push = spawnSync("git", ["push", "origin", `HEAD:${cfg.integrationBranch}`], {
         stdio: "inherit",
@@ -216,12 +217,12 @@ export async function land(): Promise<void> {
       });
       phases.pushMs = Date.now() - pushStart;
       if (push.status !== 0) {
-        console.error(`\n${RED}land: push to ${cfg.integrationBranch} failed — see output above.${RESET}`);
+        console.error("\n" + red(`land: push to ${cfg.integrationBranch} failed — see output above.`));
         console.error(`Fix the failure, then re-run 'claude-code-merge-queue land'.`);
         outcome = "push-failed";
         exitCode = 1;
       } else {
-        console.log(`${GREEN}✓ ${branch} landed on ${cfg.integrationBranch}.${RESET}`);
+        console.log(green(`✓ ${branch} landed on ${cfg.integrationBranch}.`));
         outcome = "landed";
         // Landing isn't "done" until the checkout that actually serves your
         // dev server can see it — call sync in-process rather than shelling
@@ -245,7 +246,7 @@ export async function land(): Promise<void> {
           const pruned = pruneLandedLanes(mainTop, cfg, process.cwd());
           if (pruned.length > 0) {
             const names = pruned.map((p) => p.split("/").pop()).join(", ");
-            console.log(`${DIM}pruned ${pruned.length} already-landed lane${pruned.length === 1 ? "" : "s"}: ${names}${RESET}`);
+            console.log(dim(`pruned ${pruned.length} already-landed lane${pruned.length === 1 ? "" : "s"}: ${names}`));
           }
 
           // Sibling lanes that AREN'T safe to auto-reclaim and have no one at
@@ -254,12 +255,16 @@ export async function land(): Promise<void> {
           // auto-landed for someone else.
           const orphaned = findOrphanedLanes(mainTop, cfg, process.cwd());
           for (const o of orphaned) {
-            console.log(`${YELLOW}⚠ ${describeOrphanedLane(o, cfg.integrationBranch)}.${RESET}`);
+            console.log(yellow(`⚠ ${describeOrphanedLane(o, cfg.integrationBranch)}.`));
           }
           if (orphaned.length > 0) {
             // Don't let the agent bury this in the scrollback: it's a question
             // for the human, not housekeeping to skip past (see the CLAUDE.md rule).
-            console.log(`${YELLOW}↑ surface ${orphaned.length === 1 ? "this lane" : "these lanes"} to the human and ask what to do — don't discard silently. (\`claude-code-merge-queue reconcile\` re-lists them.)${RESET}`);
+            console.log(
+              yellow(
+                `↑ surface ${orphaned.length === 1 ? "this lane" : "these lanes"} to the human and ask what to do — don't discard silently. (\`claude-code-merge-queue reconcile\` re-lists them.)`,
+              ),
+            );
           }
         } catch {
           /* best-effort — never block a successful landing over cleanup */

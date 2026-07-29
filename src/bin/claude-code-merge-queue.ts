@@ -33,6 +33,7 @@ import {
 import { resolveMainCheckout } from "../lib/main-checkout.js";
 import { pruneLandedLanes, findOrphanedLanes, describeOrphanedLane } from "../lib/prune-lanes.js";
 import { readLandMetrics } from "../lib/land-metrics.js";
+import { dim, bold, red, green, yellow, tag } from "../lib/colors.js";
 
 // Ignore SIGHUP process-wide, before any subcommand runs. `land`/`build-lock`
 // are routinely invoked as a long-running BACKGROUNDED process (an AI coding
@@ -61,7 +62,7 @@ async function readStdin(): Promise<string> {
 async function init(): Promise<void> {
   const root = findRepoRoot();
   if (!root) {
-    console.error("claude-code-merge-queue init: not inside a git repo.");
+    console.error(red("claude-code-merge-queue init: not inside a git repo."));
     process.exit(1);
   }
   const { writeFileSync, readFileSync: read, existsSync, appendFileSync } = await import("node:fs");
@@ -73,7 +74,7 @@ async function init(): Promise<void> {
   const writtenFiles: string[] = [];
 
   if (hasConfig(root)) {
-    console.log("claude-code-merge-queue init: claude-code-merge-queue.config.mjs already exists — leaving it alone.");
+    console.log(`${tag("init")} claude-code-merge-queue.config.mjs already exists — leaving it alone.`);
   } else {
     writtenFiles.push("claude-code-merge-queue.config.mjs");
     const detectedBranch = detectCurrentBranch(root);
@@ -90,22 +91,22 @@ async function init(): Promise<void> {
 export default ${JSON.stringify(generated, null, 2)};
 `;
     writeFileSync(join(root, "claude-code-merge-queue.config.mjs"), template);
-    console.log(`claude-code-merge-queue init: wrote ${join(root, "claude-code-merge-queue.config.mjs")}`);
+    console.log(`${tag("init")} wrote ${join(root, "claude-code-merge-queue.config.mjs")}`);
     if (detectedBranch && detectedBranch !== DEFAULTS.integrationBranch) {
-      console.log(`  (detected current branch "${detectedBranch}" — set as integrationBranch instead of the "${DEFAULTS.integrationBranch}" default)`);
+      console.log(dim(`  (detected current branch "${detectedBranch}" — set as integrationBranch instead of the "${DEFAULTS.integrationBranch}" default)`));
     } else if (!detectedBranch) {
       console.log("");
-      console.log(`  ⚠️  Couldn't detect the current branch (detached HEAD?) — integrationBranch`);
-      console.log(`      defaulted to "${DEFAULTS.integrationBranch}". Verify that's actually right`);
-      console.log(`      in claude-code-merge-queue.config.mjs before committing it.`);
+      console.log(yellow(`  ⚠️  Couldn't detect the current branch (detached HEAD?) — integrationBranch`));
+      console.log(yellow(`      defaulted to "${DEFAULTS.integrationBranch}". Verify that's actually right`));
+      console.log(yellow(`      in claude-code-merge-queue.config.mjs before committing it.`));
     }
     if (detectedCheck) {
-      console.log(`  (detected "${detectedCheck}" from package.json — set as checkCommand)`);
+      console.log(dim(`  (detected "${detectedCheck}" from package.json — set as checkCommand)`));
     } else {
       console.log("");
-      console.log("  ⚠️  No checkCommand detected (no check:push/check/ci/test script found in");
-      console.log("      package.json). Every push is BLOCKED until you set one — or set");
-      console.log("      checksRequired: false to deliberately run with no checks.");
+      console.log(yellow("  ⚠️  No checkCommand detected (no check:push/check/ci/test script found in"));
+      console.log(yellow("      package.json). Every push is BLOCKED until you set one — or set"));
+      console.log(yellow("      checksRequired: false to deliberately run with no checks."));
     }
   }
 
@@ -116,7 +117,7 @@ export default ${JSON.stringify(generated, null, 2)};
   const snippet = claudeMdSnippet(cfg);
   if (!existsSync(claudeMdPath)) {
     writeFileSync(claudeMdPath, `# Project instructions for Claude Code\n\n${snippet}`);
-    console.log(`claude-code-merge-queue init: wrote ${claudeMdPath}`);
+    console.log(`${tag("init")} wrote ${claudeMdPath}`);
     writtenFiles.push("CLAUDE.md");
   } else {
     const current = read(claudeMdPath, "utf8");
@@ -128,18 +129,18 @@ export default ${JSON.stringify(generated, null, 2)};
       const updated = replaceClaudeMdSnippet(current, snippet);
       if (updated !== null && updated !== current) {
         writeFileSync(claudeMdPath, updated);
-        console.log(`claude-code-merge-queue init: re-synced the Claude Code Merge Queue workflow section in ${claudeMdPath}.`);
+        console.log(`${tag("init")} re-synced the Claude Code Merge Queue workflow section in ${claudeMdPath}.`);
         writtenFiles.push("CLAUDE.md");
       } else {
-        console.log(`claude-code-merge-queue init: ${claudeMdPath} workflow section already up to date — leaving it alone.`);
+        console.log(`${tag("init")} ${dim(`${claudeMdPath} workflow section already up to date — leaving it alone.`)}`);
       }
     } else if (current.includes(MARKER)) {
       // Legacy block written before the closing marker existed — we can't
       // delimit its end without guessing, so leave it for a human to adopt.
-      console.log(`claude-code-merge-queue init: ${claudeMdPath} has a legacy workflow section with no closing marker — left untouched. Remove that block and re-run init to adopt the self-updating delimited version.`);
+      console.log(`${tag("init")} ${yellow(`${claudeMdPath} has a legacy workflow section with no closing marker — left untouched. Remove that block and re-run init to adopt the self-updating delimited version.`)}`);
     } else {
       appendFileSync(claudeMdPath, `\n${snippet}`);
-      console.log(`claude-code-merge-queue init: appended the Claude Code Merge Queue workflow section to ${claudeMdPath}`);
+      console.log(`${tag("init")} appended the Claude Code Merge Queue workflow section to ${claudeMdPath}`);
       writtenFiles.push("CLAUDE.md");
     }
   }
@@ -147,39 +148,39 @@ export default ${JSON.stringify(generated, null, 2)};
   const claudeSettingsResult = wireClaudeSettings(root);
   switch (claudeSettingsResult) {
     case "created":
-      console.log(`claude-code-merge-queue init: wrote ${join(root, ".claude", "settings.json")} with the WorktreeCreate hook.`);
+      console.log(`${tag("init")} wrote ${join(root, ".claude", "settings.json")} with the WorktreeCreate hook.`);
       writtenFiles.push(".claude/settings.json");
       break;
     case "merged":
-      console.log(`claude-code-merge-queue init: added the WorktreeCreate hook to your existing ${join(root, ".claude", "settings.json")}.`);
+      console.log(`${tag("init")} added the WorktreeCreate hook to your existing ${join(root, ".claude", "settings.json")}.`);
       writtenFiles.push(".claude/settings.json");
       break;
     case "already-wired":
-      console.log("claude-code-merge-queue init: .claude/settings.json already has the WorktreeCreate hook — leaving it alone.");
+      console.log(`${tag("init")} ${dim(".claude/settings.json already has the WorktreeCreate hook — leaving it alone.")}`);
       break;
     case "unparseable":
-      console.log("claude-code-merge-queue init: .claude/settings.json exists but isn't valid JSON — left untouched. Wire it manually,");
-      console.log("  see node_modules/claude-code-merge-queue/hooks/claude-settings.example.json.");
+      console.log(`${tag("init")} ${yellow(".claude/settings.json exists but isn't valid JSON — left untouched. Wire it manually,")}`);
+      console.log(yellow("  see node_modules/claude-code-merge-queue/hooks/claude-settings.example.json."));
       break;
   }
 
   const prePushResult = wireHuskyPrePush(root);
   switch (prePushResult) {
     case "created-dir":
-      console.log("claude-code-merge-queue init: no .husky/ directory found — created one and wrote .husky/pre-push.");
-      console.log("  (a plain, version-controlled hooks dir — works whether or not you also install the Husky package.)");
+      console.log(`${tag("init")} no .husky/ directory found — created one and wrote .husky/pre-push.`);
+      console.log(dim("  (a plain, version-controlled hooks dir — works whether or not you also install the Husky package.)"));
       writtenFiles.push(".husky/pre-push");
       break;
     case "created":
-      console.log("claude-code-merge-queue init: wrote .husky/pre-push.");
+      console.log(`${tag("init")} wrote .husky/pre-push.`);
       writtenFiles.push(".husky/pre-push");
       break;
     case "merged":
-      console.log("claude-code-merge-queue init: appended Claude Code Merge Queue's checks to your existing .husky/pre-push.");
+      console.log(`${tag("init")} appended Claude Code Merge Queue's checks to your existing .husky/pre-push.`);
       writtenFiles.push(".husky/pre-push");
       break;
     case "already-wired":
-      console.log("claude-code-merge-queue init: .husky/pre-push already wired — leaving it alone.");
+      console.log(`${tag("init")} ${dim(".husky/pre-push already wired — leaving it alone.")}`);
       break;
   }
 
@@ -191,20 +192,20 @@ export default ${JSON.stringify(generated, null, 2)};
     // through uncontested with no indication anything's wrong.
     switch (ensureHooksPath(root)) {
       case "set":
-        console.log("claude-code-merge-queue init: set core.hooksPath=.husky so the pre-push hook actually runs (normally set by your package manager's install step, which may not have run yet).");
+        console.log(`${tag("init")} set core.hooksPath=.husky so the pre-push hook actually runs (normally set by your package manager's install step, which may not have run yet).`);
         break;
       case "already-set":
         break; // the common case once installed — nothing to say
       case "custom-path":
-        console.log("claude-code-merge-queue init: core.hooksPath is set to something other than .husky — leaving it alone.");
-        console.log("  Wrote .husky/pre-push, but it won't run until your hooks path points there. Reconcile this yourself.");
+        console.log(`${tag("init")} ${yellow("core.hooksPath is set to something other than .husky — leaving it alone.")}`);
+        console.log(yellow("  Wrote .husky/pre-push, but it won't run until your hooks path points there. Reconcile this yourself."));
         break;
     }
   }
 
   switch (wirePreflightScript(root, cfg.integrationBranch)) {
     case "created":
-      console.log(`claude-code-merge-queue init: wrote ${PREFLIGHT_FILENAME} (a self-contained pre-check "land"/"sync" run before landing — see comments in the file).`);
+      console.log(`${tag("init")} wrote ${PREFLIGHT_FILENAME} (a self-contained pre-check "land"/"sync" run before landing — see comments in the file).`);
       writtenFiles.push(PREFLIGHT_FILENAME);
       break;
     case "already-exists":
@@ -214,30 +215,30 @@ export default ${JSON.stringify(generated, null, 2)};
   const scriptsResult = wirePackageJsonScripts(root);
   switch (scriptsResult.result) {
     case "added":
-      console.log(`claude-code-merge-queue init: added "${scriptsResult.added.join('", "')}" to package.json scripts.`);
+      console.log(`${tag("init")} added "${scriptsResult.added.join('", "')}" to package.json scripts.`);
       writtenFiles.push("package.json");
       break;
     case "already-wired":
-      console.log("claude-code-merge-queue init: package.json already has all five scripts — leaving them alone.");
+      console.log(`${tag("init")} ${dim("package.json already has all five scripts — leaving them alone.")}`);
       break;
     case "no-package-json":
-      console.log("claude-code-merge-queue init: no package.json found — scripts NOT wired automatically.");
-      console.log('  Add "land"/"sync"/"promote"/"reconcile"/"preview"/"preview:restore" -> "claude-code-merge-queue <name>", plus');
-      console.log(`  "preland"/"presync" -> "node ${PREFLIGHT_FILENAME} land"/"sync" yourself.`);
+      console.log(`${tag("init")} ${yellow("no package.json found — scripts NOT wired automatically.")}`);
+      console.log(yellow('  Add "land"/"sync"/"promote"/"reconcile"/"preview"/"preview:restore" -> "claude-code-merge-queue <name>", plus'));
+      console.log(yellow(`  "preland"/"presync" -> "node ${PREFLIGHT_FILENAME} land"/"sync" yourself.`));
       break;
     case "unparseable":
-      console.log("claude-code-merge-queue init: package.json exists but isn't valid JSON — left untouched. Wire the scripts manually.");
+      console.log(`${tag("init")} ${yellow("package.json exists but isn't valid JSON — left untouched. Wire the scripts manually.")}`);
       break;
   }
 
   console.log("");
-  console.log("Next steps:");
+  console.log(bold("Next steps:"));
   if (writtenFiles.length > 0) {
     console.log(`  1. Commit what it wrote — ${writtenFiles.join(", ")}.`);
-    console.log("  2. claude --worktree <name> — the agent takes it from there.");
+    console.log(`  2. ${green("claude --worktree <name>")} — the agent takes it from there.`);
   } else {
-    console.log("  1. claude --worktree <name> — the agent takes it from there.");
-    console.log("     (everything was already wired — nothing new to commit)");
+    console.log(`  1. ${green("claude --worktree <name>")} — the agent takes it from there.`);
+    console.log(dim("     (everything was already wired — nothing new to commit)"));
   }
 }
 
@@ -255,11 +256,11 @@ export default ${JSON.stringify(generated, null, 2)};
 async function uninstall(): Promise<void> {
   const root = findRepoRoot();
   if (!root) {
-    console.error("claude-code-merge-queue uninstall: not inside a git repo.");
+    console.error(red("claude-code-merge-queue uninstall: not inside a git repo."));
     process.exit(1);
   }
   if (!hasConfig(root)) {
-    console.log("claude-code-merge-queue uninstall: no claude-code-merge-queue.config found — nothing to remove.");
+    console.log(`${tag("uninstall")} ${dim("no claude-code-merge-queue.config found — nothing to remove.")}`);
     return;
   }
   const cfg = await loadConfig(root);
@@ -267,10 +268,10 @@ async function uninstall(): Promise<void> {
 
   switch (removeClaudeMdSnippet(root, cfg)) {
     case "removed":
-      console.log("claude-code-merge-queue uninstall: removed the Claude Code Merge Queue section from CLAUDE.md.");
+      console.log(`${tag("uninstall")} removed the Claude Code Merge Queue section from CLAUDE.md.`);
       break;
     case "mismatch":
-      console.log("claude-code-merge-queue uninstall: CLAUDE.md has a Claude Code Merge Queue section that doesn't match what this config would generate (hand-edited, or written under a different config) — left untouched.");
+      console.log(`${tag("uninstall")} ${yellow("CLAUDE.md has a Claude Code Merge Queue section that doesn't match what this config would generate (hand-edited, or written under a different config) — left untouched.")}`);
       manual.push("CLAUDE.md");
       break;
     case "not-found":
@@ -280,10 +281,10 @@ async function uninstall(): Promise<void> {
 
   switch (unwireClaudeSettings(root)) {
     case "removed":
-      console.log("claude-code-merge-queue uninstall: removed the WorktreeCreate hook from .claude/settings.json.");
+      console.log(`${tag("uninstall")} removed the WorktreeCreate hook from .claude/settings.json.`);
       break;
     case "unparseable":
-      console.log("claude-code-merge-queue uninstall: .claude/settings.json isn't valid JSON — left untouched.");
+      console.log(`${tag("uninstall")} ${yellow(".claude/settings.json isn't valid JSON — left untouched.")}`);
       manual.push(".claude/settings.json");
       break;
     case "not-found":
@@ -292,24 +293,24 @@ async function uninstall(): Promise<void> {
 
   switch (unwireHuskyPrePush(root)) {
     case "removed-file":
-      console.log("claude-code-merge-queue uninstall: removed .husky/pre-push (it held only Claude Code Merge Queue's checks).");
+      console.log(`${tag("uninstall")} removed .husky/pre-push (it held only Claude Code Merge Queue's checks).`);
       break;
     case "removed-block":
-      console.log("claude-code-merge-queue uninstall: removed Claude Code Merge Queue's checks from .husky/pre-push, leaving the rest of the file as it was.");
+      console.log(`${tag("uninstall")} removed Claude Code Merge Queue's checks from .husky/pre-push, leaving the rest of the file as it was.`);
       break;
     case "not-found":
       break;
   }
 
   if (removePreflightScript(root) === "removed") {
-    console.log(`claude-code-merge-queue uninstall: removed ${PREFLIGHT_FILENAME}.`);
+    console.log(`${tag("uninstall")} removed ${PREFLIGHT_FILENAME}.`);
   }
 
   const scriptsResult = unwirePackageJsonScripts(root);
   if (scriptsResult.result === "removed") {
-    console.log(`claude-code-merge-queue uninstall: removed "${scriptsResult.removed.join('", "')}" from package.json scripts.`);
+    console.log(`${tag("uninstall")} removed "${scriptsResult.removed.join('", "')}" from package.json scripts.`);
   } else if (scriptsResult.result === "unparseable") {
-    console.log("claude-code-merge-queue uninstall: package.json isn't valid JSON — left untouched.");
+    console.log(`${tag("uninstall")} ${yellow("package.json isn't valid JSON — left untouched.")}`);
     manual.push("package.json");
   }
 
@@ -317,16 +318,16 @@ async function uninstall(): Promise<void> {
   if (cfgPath) {
     const { rmSync } = await import("node:fs");
     rmSync(cfgPath);
-    console.log(`claude-code-merge-queue uninstall: removed ${cfgPath.slice(root.length + 1)} — Claude Code Merge Queue is now OFF for this repo.`);
+    console.log(`${tag("uninstall")} removed ${cfgPath.slice(root.length + 1)} — Claude Code Merge Queue is now OFF for this repo.`);
   }
 
   console.log("");
   if (manual.length > 0) {
-    console.log(`Left untouched, needs your own look: ${manual.join(", ")}.`);
+    console.log(yellow(`Left untouched, needs your own look: ${manual.join(", ")}.`));
     console.log("");
   }
-  console.log("Last step, run it yourself: npm uninstall claude-code-merge-queue");
-  console.log("(not run automatically — this command doesn't remove its own currently-executing package from node_modules.)");
+  console.log(bold("Last step, run it yourself: npm uninstall claude-code-merge-queue"));
+  console.log(dim("(not run automatically — this command doesn't remove its own currently-executing package from node_modules.)"));
 }
 
 async function main(): Promise<void> {
@@ -338,20 +339,20 @@ async function main(): Promise<void> {
     case "hook": {
       const sub = rest[0];
       if (sub === "worktree-create") return runWorktreeCreateHook();
-      console.error(`claude-code-merge-queue hook: unknown hook "${sub ?? ""}". Only "worktree-create" is supported.`);
+      console.error(red(`claude-code-merge-queue hook: unknown hook "${sub ?? ""}". Only "worktree-create" is supported.`));
       process.exit(1);
       return;
     }
     case "port": {
       const root = findRepoRoot();
       if (!root || !hasConfig(root)) {
-        console.error("claude-code-merge-queue port: no claude-code-merge-queue.config found — not a lane.");
+        console.error(red("claude-code-merge-queue port: no claude-code-merge-queue.config found — not a lane."));
         process.exit(1);
       }
       const cfg = await loadConfig(root);
       const port = lanePort(process.cwd(), cfg);
       if (port === null) {
-        console.error("claude-code-merge-queue port: current directory doesn't look like a lane worktree.");
+        console.error(red("claude-code-merge-queue port: current directory doesn't look like a lane worktree."));
         process.exit(1);
       }
       console.log(port);
@@ -374,17 +375,17 @@ async function main(): Promise<void> {
       // worktree this command itself is running from.
       const root = findRepoRoot();
       if (!root || !hasConfig(root)) {
-        console.error("claude-code-merge-queue prune: no claude-code-merge-queue.config found — nothing to do.");
+        console.error(red("claude-code-merge-queue prune: no claude-code-merge-queue.config found — nothing to do."));
         process.exit(0);
       }
       const cfg = await loadConfig(root);
       const mainTop = resolveMainCheckout(process.cwd());
       const pruned = pruneLandedLanes(mainTop, cfg, process.cwd());
       if (pruned.length === 0) {
-        console.log("claude-code-merge-queue prune: nothing to clean up — no already-landed sibling lanes found.");
+        console.log(`${tag("prune")} ${dim("nothing to clean up — no already-landed sibling lanes found.")}`);
       } else {
         const names = pruned.map((p) => p.split("/").pop()).join(", ");
-        console.log(`claude-code-merge-queue prune: removed ${pruned.length} already-landed lane${pruned.length === 1 ? "" : "s"}: ${names}`);
+        console.log(green(`✓ removed ${pruned.length} already-landed lane${pruned.length === 1 ? "" : "s"}: ${names}`));
       }
       return;
     }
@@ -400,23 +401,23 @@ async function main(): Promise<void> {
       // uncommitted work is exactly the call that has to stay a human's.
       const root = findRepoRoot();
       if (!root || !hasConfig(root)) {
-        console.error("claude-code-merge-queue reconcile: no claude-code-merge-queue.config found — nothing to do.");
+        console.error(red("claude-code-merge-queue reconcile: no claude-code-merge-queue.config found — nothing to do."));
         process.exit(0);
       }
       const cfg = await loadConfig(root);
       const mainTop = resolveMainCheckout(process.cwd());
       const orphaned = findOrphanedLanes(mainTop, cfg, process.cwd());
       if (orphaned.length === 0) {
-        console.log("claude-code-merge-queue reconcile: no stranded lanes — every sibling lane is either landed and clean or actively in use.");
+        console.log(`${tag("reconcile")} ${green("no stranded lanes — every sibling lane is either landed and clean or actively in use.")}`);
         return;
       }
       const n = orphaned.length;
-      console.log(`claude-code-merge-queue reconcile: ${n} lane${n === 1 ? "" : "s"} need${n === 1 ? "s" : ""} a decision — none touched:`);
+      console.log(yellow(`${n} lane${n === 1 ? "" : "s"} need${n === 1 ? "s" : ""} a decision — none touched:`));
       for (const o of orphaned) {
-        console.log(`  ⚠ ${describeOrphanedLane(o, cfg.integrationBranch)}`);
+        console.log(yellow(`  ⚠ ${describeOrphanedLane(o, cfg.integrationBranch)}`));
       }
       console.log("");
-      console.log("Surface these to the human and ask what to do with each — finish landing it, or discard it. Never silently delete a lane with unlanded commits or uncommitted work.");
+      console.log(yellow("Surface these to the human and ask what to do with each — finish landing it, or discard it. Never silently delete a lane with unlanded commits or uncommitted work."));
       return;
     }
     case "land-history": {
@@ -433,12 +434,12 @@ async function main(): Promise<void> {
         return;
       }
       if (records.length === 0) {
-        console.log("claude-code-merge-queue land-history: no recorded land runs yet.");
+        console.log(`${tag("land-history")} ${dim("no recorded land runs yet.")}`);
         return;
       }
       const fmt = (ms: number | null) => (ms === null ? "—" : `${(ms / 1000).toFixed(1)}s`);
       console.log(
-        `${"when".padEnd(20)}${"lane".padEnd(12)}${"outcome".padEnd(16)}${"total".padEnd(8)}${"queue".padEnd(8)}${"fetch".padEnd(8)}${"rebase".padEnd(8)}${"install".padEnd(9)}${"push".padEnd(8)}${"sync".padEnd(8)}commit`,
+        bold(`${"when".padEnd(20)}${"lane".padEnd(12)}${"outcome".padEnd(16)}${"total".padEnd(8)}${"queue".padEnd(8)}${"fetch".padEnd(8)}${"rebase".padEnd(8)}${"install".padEnd(9)}${"push".padEnd(8)}${"sync".padEnd(8)}commit`),
       );
       for (const r of records) {
         console.log(
@@ -472,17 +473,17 @@ async function main(): Promise<void> {
       // looks exactly like a real block but isn't one. Recognize "nothing
       // to push" explicitly instead of silently falling through both checks.
       if (refUpdates.length === 0) {
-        console.log("claude-code-merge-queue check-push: nothing being pushed (already up to date) — skipping checks.");
+        console.log(`${tag("check-push")} ${dim("nothing being pushed (already up to date) — skipping checks.")}`);
         process.exit(0);
       }
 
       if (process.env.CLAUDE_CODE_MERGE_QUEUE_EMERGENCY_PUSH === "1") {
-        console.log("\n🚨 CLAUDE_CODE_MERGE_QUEUE_EMERGENCY_PUSH is set — bypassing the landing queue.\n");
+        console.log(yellow("\n🚨 CLAUDE_CODE_MERGE_QUEUE_EMERGENCY_PUSH is set — bypassing the landing queue.\n"));
       }
 
       const result = checkPush(refUpdates, cfg, process.env);
       if (!result.ok) {
-        console.error(result.message);
+        if (result.message) console.error(red(result.message));
         process.exit(1);
       }
       process.exit(runCheckCommand(cfg, root));
@@ -497,28 +498,35 @@ async function main(): Promise<void> {
       console.log(pkg.version);
       return;
     }
-    default:
-      console.log(`claude-code-merge-queue — keep parallel coding agents in their lane.
-
-Usage:
-  claude-code-merge-queue init                  write a starter claude-code-merge-queue.config.mjs
-  claude-code-merge-queue uninstall             undo everything init wired (config, CLAUDE.md section, hooks, package.json scripts)
-  claude-code-merge-queue land                  rebase + push this lane onto the integration branch (queued)
-  claude-code-merge-queue land-history [--json] show the last 100 land runs' phase timings (debugging aid)
-  claude-code-merge-queue sync                  fast-forward the MAIN checkout to its upstream
-  claude-code-merge-queue reconcile             list sibling lanes with unlanded/uncommitted work (read-only)
-  claude-code-merge-queue promote               ship the integration branch to production (human-only — never script this)
-  claude-code-merge-queue preview [--restore]   swap the MAIN checkout to this lane's working tree, or restore it
-  claude-code-merge-queue build-lock -- <cmd>   run <cmd>, serialized across every lane
-  claude-code-merge-queue port                  print this lane's dev-server port
-  claude-code-merge-queue hook worktree-create  (Claude Code WorktreeCreate hook — not for direct use)
-  claude-code-merge-queue check-push            (used by the pre-push hook — not for direct use)
-`);
+    default: {
+      const usage: [string, string][] = [
+        ["claude-code-merge-queue init", "write a starter claude-code-merge-queue.config.mjs"],
+        ["claude-code-merge-queue uninstall", "undo everything init wired (config, CLAUDE.md section, hooks, package.json scripts)"],
+        ["claude-code-merge-queue land", "rebase + push this lane onto the integration branch (queued)"],
+        ["claude-code-merge-queue land-history [--json]", "show the last 100 land runs' phase timings (debugging aid)"],
+        ["claude-code-merge-queue sync", "fast-forward the MAIN checkout to its upstream"],
+        ["claude-code-merge-queue reconcile", "list sibling lanes with unlanded/uncommitted work (read-only)"],
+        ["claude-code-merge-queue promote", "ship the integration branch to production (human-only — never script this)"],
+        ["claude-code-merge-queue preview [--restore]", "swap the MAIN checkout to this lane's working tree, or restore it"],
+        ["claude-code-merge-queue build-lock -- <cmd>", "run <cmd>, serialized across every lane"],
+        ["claude-code-merge-queue port", "print this lane's dev-server port"],
+        ["claude-code-merge-queue hook worktree-create", "(Claude Code WorktreeCreate hook — not for direct use)"],
+        ["claude-code-merge-queue check-push", "(used by the pre-push hook — not for direct use)"],
+      ];
+      const width = Math.max(...usage.map(([u]) => u.length)) + 2;
+      console.log(bold("claude-code-merge-queue — keep parallel coding agents in their lane."));
+      console.log("");
+      console.log(bold("Usage:"));
+      for (const [u, description] of usage) {
+        console.log(`  ${green(u.padEnd(width))}${dim(description)}`);
+      }
+      console.log("");
       process.exit(command ? 1 : 0);
+    }
   }
 }
 
 main().catch((err: unknown) => {
-  console.error(err instanceof Error ? err.message : err);
+  console.error(red(String(err instanceof Error ? err.message : err)));
   process.exit(1);
 });

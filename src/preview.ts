@@ -41,8 +41,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveMainCheckout } from "./lib/main-checkout.js";
 import { loadConfig } from "./lib/config.js";
-
-const DIM = "\x1b[2m", RESET = "\x1b[0m", RED = "\x1b[31m", GREEN = "\x1b[32m";
+import { dim, red, green } from "./lib/colors.js";
 
 // Always excluded, regardless of framework — never rsync git internals,
 // dependencies, or secrets over a live checkout.
@@ -59,42 +58,42 @@ function gitStatus(dir: string): string {
 
 function restore(target: string, manifestPath: string): void {
   if (!existsSync(manifestPath)) {
-    console.log(`${DIM}preview: no active preview to restore.${RESET}`);
+    console.log(dim("preview: no active preview to restore."));
     return;
   }
   const { addedPaths } = JSON.parse(readFileSync(manifestPath, "utf8")) as Manifest;
-  console.log(`${DIM}reverting tracked-file changes on the dev checkout…${RESET}`);
+  console.log(dim("reverting tracked-file changes on the dev checkout…"));
   execFileSync("git", ["checkout", "--", "."], { cwd: target, stdio: "inherit" });
   for (const p of addedPaths) {
     rmSync(join(target, p), { recursive: true, force: true });
   }
   unlinkSync(manifestPath);
   const head = execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: target, encoding: "utf8" }).trim();
-  console.log(`${GREEN}✓ dev server restored to HEAD @ ${head}.${RESET}`);
+  console.log(green(`✓ dev server restored to HEAD @ ${head}.`));
 }
 
 function preview(source: string, target: string, manifestPath: string, excludes: string[]): void {
   if (source === target) {
-    console.error("claude-code-merge-queue preview: refusing to run from the dev-server checkout itself — run this from a lane worktree.");
+    console.error(red("claude-code-merge-queue preview: refusing to run from the dev-server checkout itself — run this from a lane worktree."));
     process.exit(1);
   }
   if (existsSync(manifestPath)) {
-    console.error(`${RED}preview: a preview is already active on the dev server.${RESET} Run 'claude-code-merge-queue preview --restore' first.`);
+    console.error(red("preview: a preview is already active on the dev server.") + " Run 'claude-code-merge-queue preview --restore' first.");
     process.exit(1);
   }
   const before = gitStatus(target);
   if (before.trim() !== "") {
-    console.error(`${RED}preview: the dev-server checkout isn't clean — refusing to swap over unknown local changes.${RESET}`);
+    console.error(red("preview: the dev-server checkout isn't clean — refusing to swap over unknown local changes."));
     console.error(before);
     process.exit(1);
   }
 
   const branch = execFileSync("git", ["-C", source, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
-  console.log(`${DIM}copying ${branch}'s working tree onto the dev server…${RESET}`);
+  console.log(dim(`copying ${branch}'s working tree onto the dev server…`));
   const rsyncArgs = ["-a", ...excludes.flatMap((e) => ["--exclude", e]), `${source}/`, `${target}/`];
   const rsync = spawnSync("rsync", rsyncArgs, { stdio: "inherit" });
   if (rsync.status !== 0) {
-    console.error(`${RED}preview: rsync failed.${RESET}`);
+    console.error(red("preview: rsync failed."));
     process.exit(1);
   }
 
@@ -105,8 +104,8 @@ function preview(source: string, target: string, manifestPath: string, excludes:
     .map((l) => l.slice(3).trim());
   writeFileSync(manifestPath, JSON.stringify({ branch, addedPaths } satisfies Manifest, null, 2));
 
-  console.log(`${GREEN}✓ dev server now showing ${branch}.${RESET} Refresh the browser.`);
-  console.log(`${DIM}Run 'claude-code-merge-queue preview --restore' when done.${RESET}`);
+  console.log(green(`✓ dev server now showing ${branch}.`) + " Refresh the browser.");
+  console.log(dim("Run 'claude-code-merge-queue preview --restore' when done."));
 }
 
 export async function runPreview(args: string[]): Promise<void> {
@@ -119,7 +118,7 @@ export async function runPreview(args: string[]): Promise<void> {
   try {
     execSync("command -v rsync", { stdio: "ignore" });
   } catch {
-    console.error("claude-code-merge-queue preview: rsync is required and wasn't found on PATH.");
+    console.error(red("claude-code-merge-queue preview: rsync is required and wasn't found on PATH."));
     process.exit(1);
   }
 

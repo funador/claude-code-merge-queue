@@ -27,11 +27,12 @@
  */
 import { spawn } from "node:child_process";
 import { createQueueLock } from "./lib/queue-lock.js";
+import { dim, red } from "./lib/colors.js";
 
 export async function buildLock(commandParts: string[]): Promise<void> {
   const command = commandParts.join(" ").trim();
   if (!command) {
-    console.error("claude-code-merge-queue build-lock: no command given. Usage: claude-code-merge-queue build-lock -- <command>");
+    console.error(red("claude-code-merge-queue build-lock: no command given. Usage: claude-code-merge-queue build-lock -- <command>"));
     process.exit(2);
   }
 
@@ -41,14 +42,14 @@ export async function buildLock(commandParts: string[]): Promise<void> {
     label: command,
     onWait: ({ ahead, holder }) => {
       if (ahead > 0) {
-        console.log(`\x1b[2m[build-queue] ${lock.lane}: waiting — ${ahead} build${ahead === 1 ? "" : "s"} ahead…\x1b[0m`);
+        console.log(dim(`[build-queue] ${lock.lane}: waiting — ${ahead} build${ahead === 1 ? "" : "s"} ahead…`));
       } else if (holder) {
-        console.log(`\x1b[2m[build-queue] ${lock.lane}: next up — waiting for the running build to finish…\x1b[0m`);
+        console.log(dim(`[build-queue] ${lock.lane}: next up — waiting for the running build to finish…`));
       }
     },
   });
 
-  console.log(`\x1b[2m[build-queue] ${lock.lane}: lock acquired — building…\x1b[0m`);
+  console.log(dim(`[build-queue] ${lock.lane}: lock acquired — building…`));
 
   const child = spawn(command, { shell: true, stdio: "inherit", detached: true });
 
@@ -78,7 +79,7 @@ export async function buildLock(commandParts: string[]): Promise<void> {
     }
   });
   child.on("error", (err) => {
-    console.error(`claude-code-merge-queue build-lock: failed to start command: ${err.message}`);
+    console.error(red(`claude-code-merge-queue build-lock: failed to start command: ${err.message}`));
     lock.release();
     process.exit(1);
   });

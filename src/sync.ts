@@ -20,6 +20,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { loadConfig, type ClaudeCodeMergeQueueConfig } from "./lib/config.js";
 import { resolveMainCheckout } from "./lib/main-checkout.js";
 import { detectPackageManager } from "./lib/check-command.js";
+import { dim, red, yellow, green, tag } from "./lib/colors.js";
 
 const LOCK_RETRIES = 3;
 
@@ -82,19 +83,21 @@ function refreshDependenciesIfChanged(root: string, before: string, after: strin
   const removed = removedDependencyNames(root, before, after);
   if (removed.length > 0) {
     console.error(
-      `claude-code-merge-queue sync: package.json dropped ${removed.join(", ")} — a rename/removal, not a version ` +
-        `bump. Auto-installing here would swap the shared node_modules (every lane symlinks it) out from under any ` +
-        `lane still on the old name. Skipped — run "${pm} install" in ${root} by hand once that's safe.`,
+      yellow(
+        `claude-code-merge-queue sync: package.json dropped ${removed.join(", ")} — a rename/removal, not a version ` +
+          `bump. Auto-installing here would swap the shared node_modules (every lane symlinks it) out from under any ` +
+          `lane still on the old name. Skipped — run "${pm} install" in ${root} by hand once that's safe.`,
+      ),
     );
     return;
   }
 
-  console.log(`claude-code-merge-queue sync: lockfile changed — running "${pm} install" so the shared node_modules (symlinked into every lane) stays in sync…`);
+  console.log(`${tag("sync")} ${dim(`lockfile changed — running "${pm} install" so the shared node_modules (symlinked into every lane) stays in sync…`)}`);
   const result = spawnSync(pm, ["install"], { cwd: root, stdio: "inherit" });
   if (result.status !== 0) {
-    console.error(`claude-code-merge-queue sync: "${pm} install" failed (exit ${result.status ?? 1}) — shared node_modules may be stale. Run it manually in ${root}.`);
+    console.error(red(`claude-code-merge-queue sync: "${pm} install" failed (exit ${result.status ?? 1}) — shared node_modules may be stale. Run it manually in ${root}.`));
   } else {
-    console.log("claude-code-merge-queue sync: dependencies refreshed.");
+    console.log(`${tag("sync")} ${dim("dependencies refreshed.")}`);
   }
 }
 
@@ -142,7 +145,7 @@ export async function sync(providedCfg?: ClaudeCodeMergeQueueConfig): Promise<nu
   try {
     MAIN = resolveMainCheckout(process.cwd());
   } catch {
-    console.error("claude-code-merge-queue sync: not inside a git repo — nothing to do.");
+    console.error(red("claude-code-merge-queue sync: not inside a git repo — nothing to do."));
     return 0;
   }
 
@@ -152,7 +155,7 @@ export async function sync(providedCfg?: ClaudeCodeMergeQueueConfig): Promise<nu
   const branchRes = git(MAIN, ["rev-parse", "--abbrev-ref", "HEAD"], { allowFail: true });
   const branch = branchRes.out.trim();
   if (!branch || branch === "HEAD") {
-    console.error("claude-code-merge-queue sync: the checkout is detached or unresolved — left untouched.");
+    console.error(red("claude-code-merge-queue sync: the checkout is detached or unresolved — left untouched."));
     return 0;
   }
   // The main checkout is meant to stay parked on integrationBranch permanently
@@ -163,9 +166,11 @@ export async function sync(providedCfg?: ClaudeCodeMergeQueueConfig): Promise<nu
   // thing. Say so plainly instead of surfacing a raw git error later.
   if (branch !== cfg.integrationBranch) {
     console.error(
-      `claude-code-merge-queue sync: this checkout is on '${branch}', not the configured integrationBranch ` +
-        `('${cfg.integrationBranch}'). sync only fast-forwards the main checkout — run it from ` +
-        `there, or check out '${cfg.integrationBranch}' here first. Left untouched.`,
+      red(
+        `claude-code-merge-queue sync: this checkout is on '${branch}', not the configured integrationBranch ` +
+          `('${cfg.integrationBranch}'). sync only fast-forwards the main checkout — run it from ` +
+          `there, or check out '${cfg.integrationBranch}' here first. Left untouched.`,
+      ),
     );
     return 0;
   }
@@ -196,7 +201,7 @@ export async function sync(providedCfg?: ClaudeCodeMergeQueueConfig): Promise<nu
       git(MAIN, ["checkout", "--", ...files], { allowFail: true });
       res = tryFastForward();
     } else {
-      console.error(`claude-code-merge-queue sync: ${branch} has local changes blocking fast-forward (${blocking.join(", ")}). Left untouched — resolve in the checkout.`);
+      console.error(red(`claude-code-merge-queue sync: ${branch} has local changes blocking fast-forward (${blocking.join(", ")}). Left untouched — resolve in the checkout.`));
       return 0;
     }
   }
@@ -204,19 +209,19 @@ export async function sync(providedCfg?: ClaudeCodeMergeQueueConfig): Promise<nu
   if (res.ok) {
     const after = git(MAIN, ["rev-parse", "--short", "HEAD"], { allowFail: true }).out.trim();
     if (before === after) {
-      console.log(`claude-code-merge-queue sync: ${branch} already current at ${after}.`);
+      console.log(`${tag("sync")} ${dim(`${branch} already current at ${after}.`)}`);
     } else {
-      console.log(`claude-code-merge-queue sync: fast-forwarded ${branch} ${before} → ${after} — the dev server will pick it up.`);
+      console.log(green(`✓ fast-forwarded ${branch} ${before} → ${after} — the dev server will pick it up.`));
       refreshDependenciesIfChanged(MAIN, before, after);
     }
     return 0;
   }
 
   if (/Not possible to fast-forward|diverging|non-fast-forward/i.test(res.out)) {
-    console.error(`claude-code-merge-queue sync: local ${branch} has DIVERGED from ${upstream} (something was committed directly on the checkout). Left untouched — reconcile it manually.`);
+    console.error(red(`claude-code-merge-queue sync: local ${branch} has DIVERGED from ${upstream} (something was committed directly on the checkout). Left untouched — reconcile it manually.`));
     return 0;
   }
 
-  console.error(`claude-code-merge-queue sync: could not fast-forward ${branch} — left untouched.\n${res.out.trim()}`);
+  console.error(red(`claude-code-merge-queue sync: could not fast-forward ${branch} — left untouched.\n${res.out.trim()}`));
   return 0;
 }
