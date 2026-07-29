@@ -165,6 +165,11 @@ export default ${JSON.stringify(generated, null, 2)};
 
   const prePushResult = wireHuskyPrePush(root);
   switch (prePushResult) {
+    case "created-dir":
+      console.log("claude-code-merge-queue init: no .husky/ directory found — created one and wrote .husky/pre-push.");
+      console.log("  (a plain, version-controlled hooks dir — works whether or not you also install the Husky package.)");
+      writtenFiles.push(".husky/pre-push");
+      break;
     case "created":
       console.log("claude-code-merge-queue init: wrote .husky/pre-push.");
       writtenFiles.push(".husky/pre-push");
@@ -176,14 +181,9 @@ export default ${JSON.stringify(generated, null, 2)};
     case "already-wired":
       console.log("claude-code-merge-queue init: .husky/pre-push already wired — leaving it alone.");
       break;
-    case "no-husky":
-      console.log("claude-code-merge-queue init: no .husky/ directory found — pre-push hook NOT wired automatically.");
-      console.log("  Install Husky, or copy node_modules/claude-code-merge-queue/hooks/pre-push to .git/hooks/pre-push");
-      console.log("  yourself (note: .git/hooks isn't version-controlled — only Husky's is shared with your team).");
-      break;
   }
 
-  if (prePushResult === "created" || prePushResult === "merged" || prePushResult === "already-wired") {
+  if (prePushResult === "created" || prePushResult === "created-dir" || prePushResult === "merged" || prePushResult === "already-wired") {
     // A .husky/pre-push file enforces nothing until core.hooksPath actually
     // points at .husky — normally a side effect of the package manager's
     // install step, which may not have run yet (e.g. a fresh clone, right

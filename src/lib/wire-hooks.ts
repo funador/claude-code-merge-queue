@@ -9,7 +9,7 @@
  * file already exists, and doing nothing (safely) if our entry's already
  * there. Neither ever overwrites content that isn't ours.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, chmodSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, chmodSync, rmSync, readdirSync, rmdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -44,7 +44,7 @@ const PACKAGE_SCRIPTS: Record<string, string> = {
   presync: `node ${PREFLIGHT_FILENAME} sync`,
 };
 
-export type WireResult = "created" | "merged" | "already-wired" | "unparseable" | "no-husky";
+export type WireResult = "created" | "created-dir" | "merged" | "already-wired" | "unparseable";
 
 interface ClaudeSettings {
   hooks?: {
@@ -108,9 +108,19 @@ function functionalSnippet(template: string): string {
   return lines.slice(i).join("\n").trimEnd() + "\n";
 }
 
+/**
+ * No `.husky` directory doesn't mean "nothing to do here" — it means the
+ * pre-push guardrail simply won't exist unless we make it exist. A plain
+ * directory wired through core.hooksPath (see ensureHooksPath) enforces the
+ * hook exactly as well as one Husky's own CLI would have created — this repo's
+ * own `.githooks` does the identical thing without depending on the `husky`
+ * package at all. So: create `.husky` ourselves rather than leaving a human
+ * to notice the warning, go install Husky, and come back.
+ */
 export function wireHuskyPrePush(root: string): WireResult {
   const huskyDir = join(root, ".husky");
-  if (!existsSync(huskyDir)) return "no-husky";
+  const dirExisted = existsSync(huskyDir);
+  if (!dirExisted) mkdirSync(huskyDir, { recursive: true });
 
   const path = join(huskyDir, "pre-push");
   const template = shippedPrePushTemplate();
@@ -118,7 +128,7 @@ export function wireHuskyPrePush(root: string): WireResult {
   if (!existsSync(path)) {
     writeFileSync(path, template);
     chmodSync(path, 0o755);
-    return "created";
+    return dirExisted ? "created" : "created-dir";
   }
 
   const existing = readFileSync(path, "utf8");
@@ -319,7 +329,8 @@ export type UnwirePrePushResult = "removed-file" | "removed-block" | "not-found"
  * since) is left alone rather than guessed at.
  */
 export function unwireHuskyPrePush(root: string): UnwirePrePushResult {
-  const path = join(root, ".husky", "pre-push");
+  const huskyDir = join(root, ".husky");
+  const path = join(huskyDir, "pre-push");
   if (!existsSync(path)) return "not-found";
 
   const existing = readFileSync(path, "utf8");
@@ -327,6 +338,7 @@ export function unwireHuskyPrePush(root: string): UnwirePrePushResult {
 
   if (existing === shippedPrePushTemplate()) {
     rmSync(path);
+    removeHuskyDirIfEmpty(huskyDir); // wireHuskyPrePush may have created this dir from nothing — don't leave an empty husk behind
     return "removed-file";
   }
 
@@ -337,6 +349,15 @@ export function unwireHuskyPrePush(root: string): UnwirePrePushResult {
   writeFileSync(path, existing.slice(0, idx).trimEnd() + "\n");
   chmodSync(path, 0o755);
   return "removed-block";
+}
+
+/** Best-effort only: removes `.husky` if (and only if) nothing's left inside it — never touches a dir holding anything else. */
+function removeHuskyDirIfEmpty(huskyDir: string): void {
+  try {
+    if (readdirSync(huskyDir).length === 0) rmdirSync(huskyDir);
+  } catch {
+    /* not there, not empty, or not removable — leave it alone */
+  }
 }
 
 /** The reverse of wirePreflightScript. Always safe to delete outright — the file's own header says "do not hand-edit." */

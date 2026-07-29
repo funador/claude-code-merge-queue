@@ -78,11 +78,22 @@ test("wireClaudeSettings leaves unparseable JSON untouched", () => {
   }
 });
 
-test("wireHuskyPrePush does nothing when there's no .husky directory", () => {
+test("wireHuskyPrePush creates .husky itself and wires pre-push when neither exists", () => {
   const dir = scratchDir();
   try {
-    assert.equal(wireHuskyPrePush(dir), "no-husky");
-    assert.ok(!existsSync(join(dir, ".husky")));
+    assert.equal(wireHuskyPrePush(dir), "created-dir");
+    assert.ok(existsSync(join(dir, ".husky")));
+    assert.match(readFileSync(join(dir, ".husky", "pre-push"), "utf8"), /claude-code-merge-queue check-push/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("wireHuskyPrePush is idempotent after creating .husky itself", () => {
+  const dir = scratchDir();
+  try {
+    wireHuskyPrePush(dir);
+    assert.equal(wireHuskyPrePush(dir), "already-wired");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -380,6 +391,30 @@ test("unwireHuskyPrePush deletes the file outright when wireHuskyPrePush created
     wireHuskyPrePush(dir);
     assert.equal(unwireHuskyPrePush(dir), "removed-file");
     assert.ok(!existsSync(join(dir, ".husky", "pre-push")));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("unwireHuskyPrePush also removes .husky itself when wireHuskyPrePush created that dir and nothing else ever used it", () => {
+  const dir = scratchDir();
+  try {
+    wireHuskyPrePush(dir); // no .husky existed yet -> "created-dir"
+    assert.equal(unwireHuskyPrePush(dir), "removed-file");
+    assert.ok(!existsSync(join(dir, ".husky")), ".husky should be gone, not left behind empty");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("unwireHuskyPrePush leaves .husky in place when it holds something else besides our own pre-push", () => {
+  const dir = scratchDir();
+  try {
+    wireHuskyPrePush(dir); // creates .husky + pre-push
+    writeFileSync(join(dir, ".husky", "pre-commit"), "echo unrelated hook\n");
+    assert.equal(unwireHuskyPrePush(dir), "removed-file");
+    assert.ok(existsSync(join(dir, ".husky")), ".husky must survive — it still holds pre-commit");
+    assert.ok(existsSync(join(dir, ".husky", "pre-commit")));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
