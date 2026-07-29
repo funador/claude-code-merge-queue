@@ -38,13 +38,6 @@ npx claude-code-merge-queue init
   <img src="assets/demo-terminal.svg" alt="Terminal demo: npm install --save-dev claude-code-merge-queue, then npx claude-code-merge-queue init — writes the config, CLAUDE.md, the WorktreeCreate hook, and land/sync/promote/preview scripts" width="100%" />
 </p>
 
-**Commit what it wrote**, then `claude --worktree <name>` to spin up an
-isolated lane — Claude Code Merge Queue's hook and CLAUDE.md take it from
-there. (No `checkCommand` detected in package.json? Every push is
-**blocked** until you set one — see 🧰 What's in the box below. That's on
-purpose.) You show up to run `claude-code-merge-queue promote` when you
-actually want to ship. 🚀
-
 ## ⚙️ Configuration
 
 Everything lives in one file — see
@@ -103,17 +96,6 @@ through — no checkCommand configured means every push fails by default.
 There's a way out for every block (see 🚨 The emergency hatch), but it
 takes naming the specific branch, not a generic flag.
 
-Tests that hit a shared resource (a database, a queue) can use the
-ephemeral-resource pattern in `src/lib/ephemeral.ts` — concurrent lanes get
-their own throwaway copy, cleaned up automatically even after a crash.
-
-Two library exports for scripts that need to coordinate lanes around
-something the CLI doesn't cover: `claude-code-merge-queue/queue-lock` (the
-same cross-worktree FIFO mutex `build-lock`/`land` use, under your own
-name) and `claude-code-merge-queue/retry` (retry-with-backoff for
-transient failures under concurrent load). See [`examples/`](examples/)
-for usage.
-
 ### 📝 What `init` writes
 
 - **`claude-code-merge-queue.config.mjs`** — `integrationBranch` and `checkCommand` auto-detected.
@@ -146,46 +128,23 @@ pushes, not an adversarial agent that sets the var itself.
 ## 🔍 Know the limits
 
 - **No human reviews any of this before it lands.** `checkCommand` passing
-  is the only gate — a real test suite or `echo ok` look identical to this
-  tool. `promote` is a release decision ("ship this already-tested work
-  now"), not a code read. If you want a human on every change, this is
-  missing that step on purpose.
-- **Locks are crash-safe by PID liveness, not a timeout.** Claim a
-  resource, tag it with your process ID; `kill -9` anything mid-claim and
-  the next process notices the PID is dead and reclaims it — no stale
-  locks, no timeout to tune. The `WorktreeCreate` hook applies the same
-  idea to a one-shot script: the claim IS the worktree, and `git worktree
-  add` failing on an already-taken path is the atomicity guard.
+  is the only gate — a real test suite and `echo ok` look identical to this
+  tool. Want a human on every change? This is missing that step on purpose.
+- **Locks are crash-safe by PID liveness, not a timeout.** `kill -9`
+  anything mid-claim and the next process notices the PID is dead and
+  reclaims it — no stale locks, no timeout to tune.
 - **One machine, not a fleet.** The FIFO queue lives in local temp storage —
-  it doesn't coordinate across laptops. Two machines landing at once just
-  get git's ordinary non-fast-forward rejection (safe, not corrupting).
+  two machines landing at once just get git's ordinary non-fast-forward
+  rejection.
 - **Not a security boundary.** Every guardrail here stops mistakes and
-  convention drift, not a truly adversarial agent. Shell access always
-  means `git push --no-verify`, deleting the hook, or editing the config on
-  purpose — nothing local-only can stop that.
-- **The `WorktreeCreate` hook is the youngest piece of this stack** — Claude
-  Code shipped it Feb 2026. Losing it degrades gracefully: fall back to
-  `git worktree add` by hand and you still keep the build queue, landing
-  queue, preview, and ephemeral-resource pieces, none of which depend on it.
+  convention drift, not an adversarial agent — shell access always means
+  `git push --no-verify` or editing the config on purpose.
 - **A slow `checkCommand` is a real throughput ceiling.** The FIFO lock
-  holds for its entire duration — one landing at a time, machine-wide. A
-  3–4 minute suite caps you well under 20 landings/hour, before any queue
-  wait.
+  holds for its entire duration — a 3–4 minute suite caps you well under
+  20 landings/hour.
 - **Rebase conflicts abort, they never guess.** `git rebase --abort` on any
-  conflict, working tree left clean. Normally "you" here is the agent, not
-  a human — CLAUDE.md tells it to resolve the conflict and re-run `land`.
-- **Auto-pruning checks for a live Claude Code session, via `lsof`.** A
-  merged branch alone isn't enough — a brand-new, zero-commit lane is
-  *trivially* "merged" too, so pruning also refuses to touch a worktree
-  with a live Claude Code process in it. Missing `lsof` fails closed —
-  never removes if liveness is unknown.
-- **The `WorktreeCreate` hook needs the host project's own real install.**
-  It runs via `npx claude-code-merge-queue hook worktree-create` (no
-  `node_modules/.bin` on PATH for a raw hook), and npx silently falls back
-  to an ephemeral, unpinned copy if it can't resolve the package locally.
-  The hook refuses to run at all from npx's ephemeral cache, so a broken
-  install fails loud immediately instead of limping along on a mismatched
-  stand-in.
+  conflict, working tree left clean — CLAUDE.md tells the agent to resolve
+  it and re-run `land`.
 
 ## 📄 License
 
