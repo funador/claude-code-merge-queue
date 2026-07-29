@@ -23,17 +23,6 @@ npm install --save-dev claude-code-merge-queue   # or: pnpm add -D / yarn add -D
 npx claude-code-merge-queue init
 ```
 
-<p align="center">
-  <img src="assets/demo-terminal.svg" alt="Terminal demo: npm install --save-dev claude-code-merge-queue, then npx claude-code-merge-queue init — writes the config, CLAUDE.md, the WorktreeCreate hook, and land/sync/promote/preview scripts" width="100%" />
-</p>
-
-**Commit what it wrote**, then `claude --worktree <name>` to spin up an
-isolated lane — Claude Code Merge Queue's hook and CLAUDE.md take it from
-there. Two steps, not a setup guide. (No `checkCommand` detected in
-package.json? Every push is **blocked** until you set one — see 🧰 What's
-in the box below. That's on purpose.) You show up to run
-`claude-code-merge-queue promote` when you actually want to ship. 🚀
-
 ## Contents
 
 - [🆚 vs. GitHub's Merge Queue](#-vs-githubs-merge-queue)
@@ -45,6 +34,17 @@ in the box below. That's on purpose.) You show up to run
 - [🔍 Know the limits](#-know-the-limits)
 - [🧬 Where this came from](#-where-this-came-from)
 - [📄 License](#-license)
+
+<p align="center">
+  <img src="assets/demo-terminal.svg" alt="Terminal demo: npm install --save-dev claude-code-merge-queue, then npx claude-code-merge-queue init — writes the config, CLAUDE.md, the WorktreeCreate hook, and land/sync/promote/preview scripts" width="100%" />
+</p>
+
+**Commit what it wrote**, then `claude --worktree <name>` to spin up an
+isolated lane — Claude Code Merge Queue's hook and CLAUDE.md take it from
+there. Two steps, not a setup guide. (No `checkCommand` detected in
+package.json? Every push is **blocked** until you set one — see 🧰 What's
+in the box below. That's on purpose.) You show up to run
+`claude-code-merge-queue promote` when you actually want to ship. 🚀
 
 ---
 
