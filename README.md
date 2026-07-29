@@ -34,17 +34,6 @@ package.json? Every push is **blocked** until you set one — see 🧰 What's
 in the box below. That's on purpose.) You show up to run
 `claude-code-merge-queue promote` when you actually want to ship. 🚀
 
----
-
-Claude Code's `--worktree` already isolates every agent into its own git
-worktree, natively — no setup. This is the part that comes after: what
-happens when several of them try to land, build, and test *at the same
-time*. Push races turn into rebases. Concurrent full builds turn your
-laptop into a space heater. Tests hitting a shared database race each
-other's resets and look flaky when they're not. Telling agents to
-coordinate doesn't fix it — so don't ask nicely, make the collision
-impossible. 🚦
-
 ## Contents
 
 - [🆚 vs. GitHub's Merge Queue](#-vs-githubs-merge-queue)
@@ -56,6 +45,17 @@ impossible. 🚦
 - [🔍 Know the limits](#-know-the-limits)
 - [🧬 Where this came from](#-where-this-came-from)
 - [📄 License](#-license)
+
+---
+
+Claude Code's `--worktree` already isolates every agent into its own git
+worktree, natively — no setup. This is the part that comes after: what
+happens when several of them try to land, build, and test *at the same
+time*. Push races turn into rebases. Concurrent full builds turn your
+laptop into a space heater. Tests hitting a shared database race each
+other's resets and look flaky when they're not. Telling agents to
+coordinate doesn't fix it — so don't ask nicely, make the collision
+impossible. 🚦
 
 ## 🆚 vs. GitHub's Merge Queue
 
