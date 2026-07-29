@@ -3,6 +3,9 @@
 </p>
 
 <p align="center">
+  <a href="https://www.npmjs.com/package/claude-code-merge-queue"><img alt="npm version" src="https://img.shields.io/npm/v/claude-code-merge-queue.svg"></a>
+  <a href="https://www.npmjs.com/package/claude-code-merge-queue"><img alt="npm downloads" src="https://img.shields.io/npm/dm/claude-code-merge-queue.svg"></a>
+  <a href="https://github.com/funador/claude-code-merge-queue/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/funador/claude-code-merge-queue/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.x-3178c6.svg">
   <img alt="Node" src="https://img.shields.io/badge/node-%3E%3D18-339933.svg">
@@ -35,6 +38,19 @@ exactly the wrong moment, and mean nothing by it.
 **So don't ask nicely. Make the collision impossible.** 🚦
 
 **The local, zero-cost merge queue for parallel Claude Code agents.**
+
+## Contents
+
+- [⚡ Quickstart](#-quickstart)
+- [🆚 vs. GitHub's Merge Queue](#-vs-githubs-merge-queue)
+- [🧰 What's in the box](#-whats-in-the-box)
+- [⚙️ Configuration](#️-configuration)
+- [🚨 The emergency hatch](#-the-emergency-hatch)
+- [🙌 The hands-off part](#-the-hands-off-part)
+- [🔁 The one idea underneath most of it](#-the-one-idea-underneath-most-of-it)
+- [🔍 Know the limits](#-know-the-limits)
+- [🧬 Where this came from](#-where-this-came-from)
+- [📄 License](#-license)
 
 ## ⚡ Quickstart
 
