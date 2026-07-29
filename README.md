@@ -14,34 +14,39 @@
 
 # Claude Code Merge Queue 🚦
 
-Claude Code already isolates your agents — `--worktree` (or `isolation:
-"worktree"` on a subagent) gives every session its own git worktree, natively,
-no setup. That part's solved. Claude Code Merge Queue is the part that comes after: what
-happens when four isolated agents all try to land, build, and test *at the
-same time*.
-
-- 🏁 Everyone pushes to the same branch, someone loses the race, and the
-  rejected push turns into a rebase, which sometimes turns into *another*
-  rejected push.
-- 🔥 A full build is heavy. Four of them running at once turn your laptop
-  into a space heater.
-- 🎲 If your tests hit a shared database, concurrent runs race each other's
-  resets. The failures look flaky. They are not flaky. They're just honest.
-
-None of that is a skill issue. It's what happens when several fast,
-confident processes share one mutable thing with no traffic control.
-
-Telling the agents to "please coordinate" doesn't fix it. An agent (or a
-teammate in a hurry) will violate a documented convention exactly once, at
-exactly the wrong moment, and mean nothing by it.
-
-**So don't ask nicely. Make the collision impossible.** 🚦
-
 **The local, zero-cost merge queue for parallel Claude Code agents.**
+
+## ⚡ Quickstart
+
+```bash
+npm install --save-dev claude-code-merge-queue   # or: pnpm add -D / yarn add -D / bun add -d
+npx claude-code-merge-queue init
+```
+
+<p align="center">
+  <img src="assets/demo-terminal.svg" alt="Terminal demo: npm install --save-dev claude-code-merge-queue, then npx claude-code-merge-queue init — writes the config, CLAUDE.md, the WorktreeCreate hook, and land/sync/promote/preview scripts" width="100%" />
+</p>
+
+**Commit what it wrote**, then `claude --worktree <name>` to spin up an
+isolated lane — Claude Code Merge Queue's hook and CLAUDE.md take it from
+there. Two steps, not a setup guide. (No `checkCommand` detected in
+package.json? Every push is **blocked** until you set one — see 🧰 What's
+in the box below. That's on purpose.) You show up to run
+`claude-code-merge-queue promote` when you actually want to ship. 🚀
+
+---
+
+Claude Code's `--worktree` already isolates every agent into its own git
+worktree, natively — no setup. This is the part that comes after: what
+happens when several of them try to land, build, and test *at the same
+time*. Push races turn into rebases. Concurrent full builds turn your
+laptop into a space heater. Tests hitting a shared database race each
+other's resets and look flaky when they're not. Telling agents to
+coordinate doesn't fix it — so don't ask nicely, make the collision
+impossible. 🚦
 
 ## Contents
 
-- [⚡ Quickstart](#-quickstart)
 - [🆚 vs. GitHub's Merge Queue](#-vs-githubs-merge-queue)
 - [🧰 What's in the box](#-whats-in-the-box)
 - [⚙️ Configuration](#️-configuration)
@@ -51,56 +56,6 @@ exactly the wrong moment, and mean nothing by it.
 - [🔍 Know the limits](#-know-the-limits)
 - [🧬 Where this came from](#-where-this-came-from)
 - [📄 License](#-license)
-
-## ⚡ Quickstart
-
-<p align="center">
-  <img src="assets/demo-terminal.svg" alt="Terminal demo: npm install --save-dev claude-code-merge-queue, then npx claude-code-merge-queue init — writes the config, CLAUDE.md, the WorktreeCreate hook, and land/sync/promote/preview scripts" width="100%" />
-</p>
-
-```bash
-npm install --save-dev claude-code-merge-queue   # or: pnpm add -D / yarn add -D / bun add -d
-npx claude-code-merge-queue init
-```
-
-This does the whole setup, not just the config file:
-
-- **`claude-code-merge-queue.config.mjs`** — `integrationBranch` auto-detected from your
-  current branch, `checkCommand` auto-detected from package.json
-  (`check:push` / `check` / `ci` / `test`, first match wins).
-- **`CLAUDE.md`** (or appends to yours if you already have one) — the part
-  that makes the whole thing hands-off. Claude Code reads it automatically,
-  every session, and it tells the agent to land its own work once green,
-  without being asked. See "The hands-off part" below.
-- **`.claude/settings.json`** — the `WorktreeCreate` hook wired in (created,
-  or merged into your existing settings without touching anything else
-  already there).
-- **`.husky/pre-push`** — created or appended to, *if* you already have
-  Husky. If you don't, `init` tells you so instead of silently writing to
-  the untracked, not-shared-with-your-team `.git/hooks/pre-push`.
-- **`package.json` scripts** — `land`, `sync`, `promote`, `preview`, and
-  `preview:restore` added, skipping any you've already defined yourself.
-- **`claude-code-merge-queue-preflight.mjs`** + `preland`/`presync` scripts — a
-  self-contained safety net npm runs automatically before `land`/`sync`. If
-  this tool's own name/bin ever changes again (it has once — `lanekeeper` →
-  `claude-code-merge-queue`) and a lane hasn't rebased past that point yet, its
-  `package.json` still calls the old name, which no longer exists — a bare,
-  confusing `sh: lanekeeper: command not found`. This script catches that
-  case with an actual diagnosis ("this branch is stale relative to
-  origin/&lt;branch&gt; — rebase first") instead. It's deliberately plain
-  JS with zero dependency on `claude-code-merge-queue` itself, so it keeps working across
-  future renames too.
-
-**Commit everything it wrote**, then you're running. Two steps, not a setup
-guide.
-
-If `init` couldn't detect a `checkCommand` (no matching script in
-package.json), every push is **blocked** until you set one — see 🧰 What's
-in the box below. That's on purpose.
-
-From here on: `claude --worktree <name>` to spin up an isolated lane —
-Claude Code Merge Queue's hook takes it from there, and CLAUDE.md tells the agent the rest.
-You show up to run `claude-code-merge-queue promote` when you actually want to ship. 🚀
 
 ## 🆚 vs. GitHub's Merge Queue
 
@@ -145,6 +100,36 @@ And 🧪 a documented extension point (`src/lib/ephemeral.ts` +
 skips: if your tests hit a shared resource — a database, a queue, anything
 stateful — concurrent lanes need their own throwaway copy of it, and a
 crashed run's copy needs to clean itself up without anyone noticing it died.
+
+### 📝 What `init` writes
+
+`init` does the whole setup, not just the config file:
+
+- **`claude-code-merge-queue.config.mjs`** — `integrationBranch` auto-detected from your
+  current branch, `checkCommand` auto-detected from package.json
+  (`check:push` / `check` / `ci` / `test`, first match wins).
+- **`CLAUDE.md`** (or appends to yours if you already have one) — the part
+  that makes the whole thing hands-off. Claude Code reads it automatically,
+  every session, and it tells the agent to land its own work once green,
+  without being asked. See "The hands-off part" below.
+- **`.claude/settings.json`** — the `WorktreeCreate` hook wired in (created,
+  or merged into your existing settings without touching anything else
+  already there).
+- **`.husky/pre-push`** — created or appended to, *if* you already have
+  Husky. If you don't, `init` tells you so instead of silently writing to
+  the untracked, not-shared-with-your-team `.git/hooks/pre-push`.
+- **`package.json` scripts** — `land`, `sync`, `promote`, `preview`, and
+  `preview:restore` added, skipping any you've already defined yourself.
+- **`claude-code-merge-queue-preflight.mjs`** + `preland`/`presync` scripts — a
+  self-contained safety net npm runs automatically before `land`/`sync`. If
+  this tool's own name/bin ever changes again (it has once — `lanekeeper` →
+  `claude-code-merge-queue`) and a lane hasn't rebased past that point yet, its
+  `package.json` still calls the old name, which no longer exists — a bare,
+  confusing `sh: lanekeeper: command not found`. This script catches that
+  case with an actual diagnosis ("this branch is stale relative to
+  origin/&lt;branch&gt; — rebase first") instead. It's deliberately plain
+  JS with zero dependency on `claude-code-merge-queue` itself, so it keeps working across
+  future renames too.
 
 ### 📦 Library exports
 
