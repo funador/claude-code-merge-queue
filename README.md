@@ -54,6 +54,10 @@ exactly the wrong moment, and mean nothing by it.
 
 ## ⚡ Quickstart
 
+<p align="center">
+  <img src="assets/demo-terminal.svg" alt="Terminal demo: npm install --save-dev claude-code-merge-queue, then npx claude-code-merge-queue init — writes the config, CLAUDE.md, the WorktreeCreate hook, and land/sync/promote/preview scripts" width="100%" />
+</p>
+
 ```bash
 npm install --save-dev claude-code-merge-queue   # or: pnpm add -D / yarn add -D / bun add -d
 npx claude-code-merge-queue init

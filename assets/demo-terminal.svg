@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700" fill="none" role="img" aria-label="Terminal demo: npm install claude-code-merge-queue, then npx claude-code-merge-queue init">
+  <defs>
+    <linearGradient id="termCardBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B1120"></stop>
+      <stop offset="1" stop-color="#111C31"></stop>
+    </linearGradient>
+    <filter id="termCardShadow" x="-4%" y="-6%" width="108%" height="118%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#0B1120" flood-opacity="0.28"></feDropShadow>
+    </filter>
+  </defs>
+
+  <rect x="40" y="30" width="1120" height="610" rx="20" fill="url(#termCardBg)" stroke="rgba(255,255,255,0.08)" filter="url(#termCardShadow)"></rect>
+
+  <circle cx="76" cy="70" r="7" fill="#FF4D4D"></circle>
+  <circle cx="100" cy="70" r="7" fill="#FFC53D"></circle>
+  <circle cx="124" cy="70" r="7" fill="#16E0AD"></circle>
+  <text x="600" y="75" text-anchor="middle" font-family="&#39;JetBrains Mono&#39;, ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" fill="#7C8BA5">zsh — claude-code-merge-queue init</text>
+  <line x1="64" y1="96" x2="1136" y2="96" stroke="rgba(255,255,255,0.08)" stroke-width="1"></line>
+
+  <g font-family="&#39;JetBrains Mono&#39;, ui-monospace, SFMono-Regular, Menlo, monospace" font-size="19" font-weight="500">
+    <text x="64" y="140"><tspan fill="#16E0AD">&#8594; </tspan><tspan fill="#22D3EE">your-project </tspan><tspan fill="#B57BFF">git:(main) </tspan><tspan fill="#F5F7FA">npm install --save-dev claude-code-merge-queue</tspan></text>
+    <text x="84" y="172" fill="#7C8BA5">added 1 package in 668ms</text>
+
+    <text x="64" y="230"><tspan fill="#16E0AD">&#8594; </tspan><tspan fill="#22D3EE">your-project </tspan><tspan fill="#B57BFF">git:(main) </tspan><tspan fill="#F5F7FA">npx claude-code-merge-queue init</tspan></text>
+    <text x="64" y="262"><tspan fill="#FF6AD0">claude-code-merge-queue init: </tspan><tspan fill="#F5F7FA">wrote claude-code-merge-queue.config.mjs</tspan></text>
+    <text x="84" y="292" fill="#7C8BA5">detected &quot;npm run check&quot; — set as checkCommand</text>
+    <text x="64" y="322"><tspan fill="#FF6AD0">claude-code-merge-queue init: </tspan><tspan fill="#F5F7FA">wrote CLAUDE.md</tspan></text>
+    <text x="64" y="352"><tspan fill="#FF6AD0">claude-code-merge-queue init: </tspan><tspan fill="#F5F7FA">wrote .claude/settings.json (WorktreeCreate hook)</tspan></text>
+    <text x="64" y="382"><tspan fill="#FF6AD0">claude-code-merge-queue init: </tspan><tspan fill="#F5F7FA">added land, sync, promote, preview scripts</tspan></text>
+
+    <text x="64" y="440" fill="#F5F7FA" font-weight="700">Next steps:</text>
+    <text x="64" y="470" fill="#CBD5E1">  1. Commit what it wrote.</text>
+    <text x="64" y="500"><tspan fill="#CBD5E1">  2. </tspan><tspan fill="#16E0AD">claude --worktree &lt;name&gt;</tspan><tspan fill="#CBD5E1"> — the agent takes it from there.</tspan></text>
+
+    <text x="64" y="560"><tspan fill="#16E0AD">&#8594; </tspan><tspan fill="#22D3EE">your-project </tspan><tspan fill="#B57BFF">git:(main) </tspan><tspan fill="#F5F7FA">✗ </tspan></text>
+  </g>
+  <rect x="380" y="546" width="11" height="20" fill="#F5F7FA">
+    <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;0.4;0.4;0.9;1" dur="1.1s" repeatCount="indefinite"></animate>
+  </rect>
+</svg>
