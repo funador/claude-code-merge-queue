@@ -106,6 +106,22 @@ export interface ClaudeCodeMergeQueueConfig {
    * which a human or script can always run.
    */
   autoLand: boolean;
+  /**
+   * A shell command fired after a SUCCESSFUL `claude-code-merge-queue land` — push landed,
+   * `sync` ran — and only after the landing queue lock has already been
+   * released, so it can never hold up another lane's land. Spawned detached,
+   * stdio ignored, and never awaited: land exits immediately regardless of
+   * what this command does or how long it takes, and any error spawning it
+   * is swallowed — a hook must never fail a landing that already succeeded.
+   * Because land doesn't wait on it, THIS COMMAND is responsible for
+   * bounding its own runtime if that matters to you (e.g. `curl --max-time
+   * 5 ...`, or wrap it in `timeout 10s ...`) — land can't enforce one on a
+   * process it's already detached from.
+   *
+   * Receives CCMQ_LANDED_SHA, CCMQ_INTEGRATION_BRANCH, and CCMQ_LANE_BRANCH
+   * in its environment. `null` (the default) means no hook runs.
+   */
+  onLand: string | null;
 }
 
 export const DEFAULTS: ClaudeCodeMergeQueueConfig = {
@@ -122,6 +138,7 @@ export const DEFAULTS: ClaudeCodeMergeQueueConfig = {
   checkCommand: null,
   checksRequired: true,
   autoLand: true,
+  onLand: null,
 };
 
 /**
@@ -170,6 +187,9 @@ export function validateConfig(cfg: ClaudeCodeMergeQueueConfig): string[] {
   }
   if (typeof cfg.autoLand !== "boolean") {
     problems.push("autoLand must be a boolean.");
+  }
+  if (cfg.onLand !== null && !nonEmptyString(cfg.onLand)) {
+    problems.push("onLand must be null or a non-empty string.");
   }
   return problems;
 }

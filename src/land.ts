@@ -27,7 +27,7 @@
  *
  *   Usage:  claude-code-merge-queue land   (run from a lane worktree, on its own branch)
  */
-import { execSync, spawnSync } from "node:child_process";
+import { execSync, spawn, spawnSync } from "node:child_process";
 import { existsSync, lstatSync } from "node:fs";
 import { basename, join } from "node:path";
 import { createQueueLock } from "./lib/queue-lock.js";
@@ -78,6 +78,33 @@ function refreshLaneDepsAfterRebase(root: string, preRebaseHead: string): void {
   const result = spawnSync(pm, ["install"], { cwd: root, stdio: "inherit" });
   if (result.status !== 0) {
     console.error(red(`land: "${pm} install" failed (exit ${result.status ?? 1}) — the checks below may fail on stale dependencies.`));
+  }
+}
+
+/**
+ * Fire the configured `onLand` hook, if any, after a successful land. Spawned
+ * detached + unref'd + stdio ignored and never awaited — land moves on
+ * immediately regardless of what the command does, and any error even
+ * SPAWNING it is swallowed. A hook must never turn a landing that already
+ * succeeded into a failure, and land must never wait on (or be able to hold
+ * the queue lock open for) a command it doesn't control.
+ */
+function fireOnLand(command: string, info: { landedCommit: string | null; branch: string; integrationBranch: string }): void {
+  try {
+    const child = spawn(command, {
+      shell: true,
+      detached: true,
+      stdio: "ignore",
+      env: {
+        ...process.env,
+        CCMQ_LANDED_SHA: info.landedCommit ?? "",
+        CCMQ_INTEGRATION_BRANCH: info.integrationBranch,
+        CCMQ_LANE_BRANCH: info.branch,
+      },
+    });
+    child.unref();
+  } catch {
+    /* best-effort — onLand must never fail a landing that already succeeded */
   }
 }
 
@@ -291,6 +318,12 @@ export async function land(): Promise<void> {
       });
     }
     lock.release();
+  }
+  // Fired here — after the lock is fully released — so a slow or hung onLand
+  // command can NEVER hold up another lane waiting on the same queue. Only on
+  // an actually-landed outcome (not a rebase conflict or a failed push).
+  if (outcome === "landed" && cfg.onLand) {
+    fireOnLand(cfg.onLand, { landedCommit, branch, integrationBranch: cfg.integrationBranch });
   }
   process.exit(exitCode);
 }
