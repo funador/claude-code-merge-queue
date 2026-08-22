@@ -66,9 +66,27 @@ export interface ClaudeCodeMergeQueueConfig {
   disposableUntracked: string[];
   /**
    * Git-ignored paths copied by reference (symlinked) into every new lane
-   * so it never needs a fresh install or a copy of your secrets.
+   * so it never needs a fresh install or a copy of your secrets. Don't put
+   * `node_modules` here if `installOnCreate` is true — the two are
+   * alternatives, not additive (see `installOnCreate`).
    */
   symlinks: string[];
+  /**
+   * When true, a new lane gets its own real `<detected-pm> install` (see
+   * `detectPackageManager`) instead of relying on `node_modules` in
+   * `symlinks`. Worth it under a package manager with a shared, content-
+   * addressed store (pnpm, and Bun's global cache) — the install is real and
+   * independent per lane (a lane can bump/add a dep without disturbing any
+   * sibling lane, and without the "break the symlink, reinstall" step a
+   * symlinked node_modules eventually forces) while costing barely more disk
+   * than the symlink did, because the store, not the lane, holds the actual
+   * package contents. Under npm's flat, fully-duplicated node_modules this
+   * trade is usually not worth it — that's why the default is `false`.
+   * Runs synchronously during worktree creation (best-effort: a failed
+   * install is logged to stderr, not fatal — the lane still gets created,
+   * same as a best-effort symlink failing).
+   */
+  installOnCreate: boolean;
   /**
    * Build-output directories `preview` never copies onto the main checkout,
    * on top of the fixed, always-excluded set (.git, node_modules, .env,
@@ -139,6 +157,7 @@ export const DEFAULTS: ClaudeCodeMergeQueueConfig = {
   checksRequired: true,
   autoLand: true,
   onLand: null,
+  installOnCreate: false,
 };
 
 /**
@@ -190,6 +209,16 @@ export function validateConfig(cfg: ClaudeCodeMergeQueueConfig): string[] {
   }
   if (cfg.onLand !== null && !nonEmptyString(cfg.onLand)) {
     problems.push("onLand must be null or a non-empty string.");
+  }
+  if (typeof cfg.installOnCreate !== "boolean") {
+    problems.push("installOnCreate must be a boolean.");
+  }
+  if (cfg.installOnCreate && cfg.symlinks.includes("node_modules")) {
+    problems.push(
+      "installOnCreate is true AND symlinks includes \"node_modules\" — pick one: installOnCreate " +
+        "gives each lane its own real install, symlinking node_modules shares one across all lanes. " +
+        "Doing both means a real install immediately shadows the symlink, so the symlink entry does nothing.",
+    );
   }
   return problems;
 }

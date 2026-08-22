@@ -8,15 +8,18 @@ import { sync } from "../src/sync.js";
 import { DEFAULTS } from "../src/lib/config.js";
 
 /**
- * A fake `npm` on PATH that just records it ran, instead of doing a real
- * (slow, network-dependent) install. Returns the marker file path — assert
- * against its contents, or its absence, to prove install ran or didn't.
+ * A fake package-manager binary on PATH that just records it ran, instead of
+ * doing a real (slow, network-dependent) install. Returns the marker file
+ * path — assert against its contents, or its absence, to prove install ran
+ * or didn't. Defaults to "npm" (most existing tests' repos have no
+ * packageManager field / lockfile, so detectPackageManager falls back to
+ * npm); pass "pnpm" for a repo that declares itself pnpm.
  */
-function fakePackageManagerBin(exitCode = 0): { binDir: string; marker: string } {
+function fakePackageManagerBin(exitCode = 0, pm: "npm" | "pnpm" = "npm"): { binDir: string; marker: string } {
   const binDir = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-fakebin-"));
   const marker = join(binDir, "install-ran.txt");
-  writeFileSync(join(binDir, "npm"), `#!/bin/sh\necho "$@" >> "${marker}"\nexit ${exitCode}\n`);
-  chmodSync(join(binDir, "npm"), 0o755);
+  writeFileSync(join(binDir, pm), `#!/bin/sh\necho "$@" >> "${marker}"\nexit ${exitCode}\n`);
+  chmodSync(join(binDir, pm), 0o755);
   return { binDir, marker };
 }
 
@@ -177,6 +180,36 @@ test("sync runs an install when the fast-forwarded range changed package-lock.js
     const code = await sync();
     assert.equal(code, 0);
     assert.ok(existsSync(marker), "expected npm install to have run");
+    assert.equal(readFileSync(marker, "utf8").trim(), "install");
+  } finally {
+    process.env.PATH = originalPath;
+    process.chdir(cwd);
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(binDir, { recursive: true, force: true });
+  }
+});
+
+test("sync runs a pnpm install (not npm) when the fast-forwarded range changed pnpm-lock.yaml — the detected-PM branch, previously only ever exercised with a fake npm", async () => {
+  const { dir, remote } = makeRepoWithRemote();
+  const cwd = process.cwd();
+  const { binDir, marker } = fakePackageManagerBin(0, "pnpm");
+  const originalPath = process.env.PATH;
+  try {
+    // Declaring packageManager on the base commit is what makes
+    // detectPackageManager resolve "pnpm" for this checkout — mirrors how a
+    // real pnpm consumer's committed package.json would look.
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ packageManager: "pnpm@11.9.0" }));
+    git(dir, ["add", "-A"]);
+    git(dir, ["commit", "-q", "-m", "declare pnpm"]);
+    git(dir, ["push", "-q", "origin", "main"]);
+
+    pushLockfileChange(remote, "pnpm-lock.yaml", "bump a dep");
+
+    process.chdir(dir);
+    process.env.PATH = `${binDir}:${originalPath}`;
+    const code = await sync();
+    assert.equal(code, 0);
+    assert.ok(existsSync(marker), "expected pnpm install to have run");
     assert.equal(readFileSync(marker, "utf8").trim(), "install");
   } finally {
     process.env.PATH = originalPath;

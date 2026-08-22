@@ -29,6 +29,7 @@ import { dirname, join, basename, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadConfig, hasConfig, DEFAULTS, type ClaudeCodeMergeQueueConfig } from "../lib/config.js";
 import { resolveMainCheckout } from "../lib/main-checkout.js";
+import { detectPackageManager } from "../lib/check-command.js";
 
 interface HookInput {
   cwd?: string;
@@ -152,6 +153,28 @@ export function createLane(mainTop: string, cfg: ClaudeCodeMergeQueueConfig): { 
       }
     }
 
+    if (cfg.installOnCreate) {
+      // Detected from the NEW worktree's own checked-out lockfile, not
+      // mainTop's — `wt` is a real `git worktree add` checkout of the same
+      // commit, so whatever lockfile the repo has committed is already a
+      // real file here (this is the alternative to symlinking node_modules,
+      // so there's nothing to wait on). Best-effort, matching the symlink
+      // loop above: a failed install still leaves the lane usable (git-wise)
+      // for someone to fix by hand, so it must never block lane creation the
+      // way a `git worktree add` failure does.
+      const pm = detectPackageManager(wt);
+      try {
+        execFileSync(pm, ["install"], { cwd: wt, stdio: ["ignore", "pipe", "pipe"] });
+      } catch (e) {
+        const err = e as { stdout?: string; stderr?: string };
+        process.stderr.write(
+          `claude-code-merge-queue: installOnCreate's "${pm} install" failed in ${wt} — the lane was ` +
+            `still created, but node_modules may be missing or incomplete. Run "${pm} install" there ` +
+            `by hand.\n${err.stdout ?? ""}${err.stderr ?? ""}\n`,
+        );
+      }
+    }
+
     return { wt, branch, lane };
   }
 }
@@ -168,11 +191,20 @@ export function createLane(mainTop: string, cfg: ClaudeCodeMergeQueueConfig): { 
 // that interrupts that leaves precisely this state). That fallback ran
 // silently for long enough in production to block two lanes from landing
 // before anyone noticed node_modules was broken. Refuse to proceed if this
-// module is executing from npx's ephemeral cache instead of the project's
-// own installed copy, so a broken install fails loud immediately instead of
-// limping along on a stand-in version nobody asked for.
+// module is executing from npx's (or pnpm dlx's — same failure class, same
+// registry-fallback trap, verified against a real `pnpm dlx` cache path on
+// this machine) ephemeral cache instead of the project's own installed
+// copy, so a broken install fails loud immediately instead of limping along
+// on a stand-in version nobody asked for.
+//
+// yarn dlx / bunx aren't covered here yet — their cache-path shapes haven't
+// been verified against a real run the way npx's and pnpm dlx's have (see
+// the "measure, don't guess" note in the project this shipped from). A
+// consumer on yarn/bun still gets `expectsLocalInstall`'s package.json
+// check; it just won't catch THIS specific ephemeral-fallback failure mode
+// yet. Extend this once verified, the same way pnpm dlx was added.
 export function isEphemeralNpxCopy(selfPath: string): boolean {
-  return selfPath.includes(`${sep}_npx${sep}`);
+  return selfPath.includes(`${sep}_npx${sep}`) || selfPath.includes(`${sep}pnpm${sep}dlx${sep}`);
 }
 
 // The guard above only makes sense for a host project that's an npm project
@@ -212,9 +244,10 @@ export async function runWorktreeCreateHook(): Promise<void> {
   try {
     const mainTop = resolveMainCheckout(fromCwd);
     if (expectsLocalInstall(mainTop) && isEphemeralNpxCopy(fileURLToPath(import.meta.url))) {
+      const pm = detectPackageManager(mainTop);
       throw new Error(
-        "running from npx's ephemeral cache, not this project's own installed dependency — " +
-          "node_modules is missing or broken. Run `npm install` in the main checkout and try again.",
+        `running from ${pm === "npm" ? "npx" : `${pm}'s`} ephemeral cache, not this project's own installed ` +
+          `dependency — node_modules is missing or broken. Run \`${pm} install\` in the main checkout and try again.`,
       );
     }
     const cfg = hasConfig(mainTop) ? await loadConfig(mainTop) : { ...DEFAULTS };

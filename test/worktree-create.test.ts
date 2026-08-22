@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, realpathSync, rmSync, mkdirSync, cpSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, realpathSync, rmSync, mkdirSync, cpSync, writeFileSync, chmodSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,6 +21,20 @@ function makeScratchRepo(): string {
   execFileSync("git", ["config", "user.name", "Test"], { cwd: dir });
   execFileSync("git", ["commit", "-q", "--allow-empty", "-m", "init"], { cwd: dir });
   return dir;
+}
+
+/**
+ * A fake package-manager binary on PATH that just records it ran (and
+ * where), instead of doing a real install — same pattern as sync.test.ts's
+ * fakePackageManagerBin, duplicated rather than shared since these two test
+ * files don't otherwise depend on each other.
+ */
+function fakePackageManagerBin(pm: "npm" | "pnpm"): { binDir: string; marker: string } {
+  const binDir = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-wt-fakebin-"));
+  const marker = join(binDir, "install-ran.txt");
+  writeFileSync(join(binDir, pm), `#!/bin/sh\necho "$PWD $@" >> "${marker}"\nexit 0\n`);
+  chmodSync(join(binDir, pm), 0o755);
+  return { binDir, marker };
 }
 
 function cleanupRepoAndLanes(mainTop: string): void {
@@ -55,6 +69,64 @@ test("createLane claims sequential lane numbers and creates real worktrees", () 
     assert.match(branches, /lane\/2/);
   } finally {
     cleanupRepoAndLanes(mainTop);
+  }
+});
+
+test("createLane runs a real per-lane install when installOnCreate is true, instead of symlinking node_modules", () => {
+  const mainTop = makeScratchRepo();
+  const { binDir, marker } = fakePackageManagerBin("pnpm");
+  const originalPath = process.env.PATH;
+  try {
+    // The new worktree is a real `git worktree add` checkout of this commit,
+    // so this is what detectPackageManager sees INSIDE the lane — proves
+    // detection reads the lane's own checked-out files, not mainTop's.
+    writeFileSync(join(mainTop, "package.json"), JSON.stringify({ packageManager: "pnpm@11.9.0" }));
+    execFileSync("git", ["add", "-A"], { cwd: mainTop });
+    execFileSync("git", ["commit", "-q", "-m", "declare pnpm"], { cwd: mainTop });
+
+    process.env.PATH = `${binDir}:${originalPath}`;
+    const { wt } = createLane(mainTop, { ...DEFAULTS, symlinks: [], installOnCreate: true });
+
+    assert.ok(existsSync(marker), "expected an install to have run in the new lane");
+    const [cwdUsed, ...args] = readFileSync(marker, "utf8").trim().split(" ");
+    assert.equal(realpathSync(cwdUsed), realpathSync(wt), "install must run with the NEW lane as cwd, not mainTop");
+    assert.equal(args.join(" "), "install");
+    assert.ok(!existsSync(join(wt, "node_modules")), "no symlink was configured — fakePackageManagerBin doesn't create node_modules itself, confirming this path doesn't fall back to symlinking");
+  } finally {
+    process.env.PATH = originalPath;
+    cleanupRepoAndLanes(mainTop);
+    rmSync(binDir, { recursive: true, force: true });
+  }
+});
+
+test("createLane still creates the lane even when installOnCreate's install fails — best-effort, not fatal", () => {
+  const mainTop = makeScratchRepo();
+  const binDir = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-wt-fakebin-"));
+  const originalPath = process.env.PATH;
+  try {
+    writeFileSync(join(binDir, "npm"), `#!/bin/sh\nexit 1\n`);
+    chmodSync(join(binDir, "npm"), 0o755);
+    process.env.PATH = `${binDir}:${originalPath}`;
+
+    let stderr = "";
+    const origWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: string) => {
+      stderr += chunk;
+      return true;
+    }) as typeof process.stderr.write;
+    let result: { wt: string; branch: string; lane: number };
+    try {
+      result = createLane(mainTop, { ...DEFAULTS, symlinks: [], installOnCreate: true });
+    } finally {
+      process.stderr.write = origWrite;
+    }
+
+    assert.ok(existsSync(result.wt), "the lane worktree must still exist despite the failed install");
+    assert.match(stderr, /install.*failed/i);
+  } finally {
+    process.env.PATH = originalPath;
+    cleanupRepoAndLanes(mainTop);
+    rmSync(binDir, { recursive: true, force: true });
   }
 });
 
@@ -154,12 +226,24 @@ test("the hook resolves the main checkout correctly when invoked from INSIDE an 
   }
 });
 
-test("isEphemeralNpxCopy detects npm's npx cache path and nothing else", () => {
+test("isEphemeralNpxCopy detects npm's npx AND pnpm's dlx cache paths, and nothing else", () => {
   assert.equal(isEphemeralNpxCopy("/Users/jesse/.npm/_npx/abc123/node_modules/claude-code-merge-queue/dist/hooks/worktree-create.js"), true);
+  // Real shape observed from an actual `pnpm dlx` run (macOS):
+  // ~/Library/Caches/pnpm/dlx/<hash>/<random>/node_modules/<pkg>/... — the
+  // ${sep}pnpm${sep}dlx${sep} segment is what's cross-platform-stable (macOS
+  // and Linux both put it under a "pnpm" cache dir; only the parent varies).
+  assert.equal(
+    isEphemeralNpxCopy(
+      "/Users/jesse/Library/Caches/pnpm/dlx/f9e99c4313084f05f3756fa56ad93726/mt4hpqrk-jzc/node_modules/claude-code-merge-queue/dist/hooks/worktree-create.js",
+    ),
+    true,
+  );
   assert.equal(isEphemeralNpxCopy("/Users/jesse/Desktop/projects/hola/node_modules/claude-code-merge-queue/dist/hooks/worktree-create.js"), false);
   assert.equal(isEphemeralNpxCopy("/Users/jesse/Desktop/projects/hola-2/node_modules/claude-code-merge-queue/dist/hooks/worktree-create.js"), false);
   // A pnpm/yarn-style nested store path is a real, legitimate local install —
   // must not be mistaken for the ephemeral cache just because it's nested.
+  // Distinct from the dlx case above: ".pnpm" (the local store folder, dot-
+  // prefixed) vs "pnpm/dlx" (the global cache dir) never collide.
   assert.equal(
     isEphemeralNpxCopy("/Users/jesse/project/node_modules/.pnpm/claude-code-merge-queue@0.1.3/node_modules/claude-code-merge-queue/dist/hooks/worktree-create.js"),
     false,

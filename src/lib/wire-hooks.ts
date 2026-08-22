@@ -13,6 +13,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, chm
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { detectPackageManager } from "./check-command.js";
 
 const HOOK_COMMAND = "npx claude-code-merge-queue hook worktree-create";
 const PRE_PUSH_MARKER = "claude-code-merge-queue check-push";
@@ -275,6 +276,66 @@ export function wirePackageJsonScripts(root: string): { result: ScriptsWireResul
 
   writeFileSync(path, JSON.stringify(pkg, null, 2) + "\n");
   return { result: "added", added };
+}
+
+const NPMRC_PRE_POST_SCRIPTS_LINE = "enable-pre-post-scripts=true";
+// A short, self-contained explanation written ABOVE our line so a human
+// reading .npmrc later understands why it's there without needing to go
+// find this source file — same reasoning as PRE_PUSH_APPEND_MARKER_LINE's
+// comment above the pre-push block it owns.
+const NPMRC_PRE_POST_SCRIPTS_COMMENT =
+  "# claude-code-merge-queue: pnpm skips npm-style pre<script>/post<script> hooks by default — this " +
+  "makes \"preland\"/\"presync\" (the stale-branch check before land/sync) actually fire. Added by `claude-code-merge-queue init`.";
+
+export type NpmrcWireResult = "added" | "already-wired" | "not-applicable";
+
+/**
+ * pnpm >=7 doesn't run arbitrary npm-style `pre<script>`/`post<script>`
+ * hooks unless `enable-pre-post-scripts=true` is set — without it, the
+ * "preland"/"presync" scripts wirePackageJsonScripts adds are silently dead
+ * on a pnpm consumer (they're never invoked before "land"/"sync"). npm
+ * itself needs no such setting (its pre/post-script lifecycle is always on),
+ * and would print an "Unknown project config" warning on every command if
+ * this key were written unconditionally — so this only writes anything at
+ * all when the detected package manager is actually pnpm.
+ *
+ * Same additive/idempotent contract as the rest of this file: creates
+ * `.npmrc` if missing, appends just this line (with its explanatory
+ * comment) if the file exists but lacks it, and does nothing if it's
+ * already there — even if a human wrote it themselves, not `init`.
+ */
+export function wireNpmrcPrePostScripts(root: string): NpmrcWireResult {
+  if (detectPackageManager(root) !== "pnpm") return "not-applicable";
+
+  const path = join(root, ".npmrc");
+  const existing = existsSync(path) ? readFileSync(path, "utf8") : "";
+  if (existing.split("\n").some((line) => line.trim() === NPMRC_PRE_POST_SCRIPTS_LINE)) {
+    return "already-wired";
+  }
+
+  const separator = existing.length > 0 && !existing.endsWith("\n") ? "\n" : "";
+  const block = `${separator}${existing.length > 0 ? "\n" : ""}${NPMRC_PRE_POST_SCRIPTS_COMMENT}\n${NPMRC_PRE_POST_SCRIPTS_LINE}\n`;
+  writeFileSync(path, existing + block);
+  return "added";
+}
+
+/**
+ * The reverse of wireNpmrcPrePostScripts: removes only the exact line it
+ * would have written (plus its explanatory comment directly above, if
+ * present), never touching anything else a human added to `.npmrc`.
+ */
+export function unwireNpmrcPrePostScripts(root: string): "removed" | "not-found" {
+  const path = join(root, ".npmrc");
+  if (!existsSync(path)) return "not-found";
+
+  const lines = readFileSync(path, "utf8").split("\n");
+  const idx = lines.findIndex((line) => line.trim() === NPMRC_PRE_POST_SCRIPTS_LINE);
+  if (idx === -1) return "not-found";
+
+  const commentIdx = idx > 0 && lines[idx - 1]?.trim() === NPMRC_PRE_POST_SCRIPTS_COMMENT ? idx - 1 : idx;
+  lines.splice(commentIdx, idx - commentIdx + 1);
+  writeFileSync(path, lines.join("\n"));
+  return "removed";
 }
 
 // --- uninstall: the reverse of every wire* function above -----------------

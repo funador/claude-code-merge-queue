@@ -15,14 +15,27 @@ import { dim, red, tag } from "./colors.js";
 const CANDIDATE_SCRIPTS = ["check:push", "check", "ci", "test"];
 
 /**
- * Which package manager actually installed this project — detected from its
- * lockfile, since that's the one signal that's always there regardless of
- * what's on PATH. Defaulting straight to npm regardless of the real answer
- * isn't a hypothetical: a pnpm workspace's scripts can rely on pnpm-specific
- * behavior (workspace: protocol deps, `--filter`), and `npm run` may not
- * even be installed on a pnpm/yarn/bun-only machine.
+ * Which package manager actually installed this project. `package.json`'s
+ * `packageManager` field (Corepack's field, e.g. `"pnpm@11.9.0"`) is the
+ * most explicit signal a repo can give — it's a deliberate declaration, not
+ * an inference — so it's checked first; the lockfile is the fallback for a
+ * repo that hasn't adopted that field, since it's the next-most-reliable
+ * signal that's always there regardless of what's on PATH. Defaulting
+ * straight to npm regardless of the real answer isn't a hypothetical: a
+ * pnpm workspace's scripts can rely on pnpm-specific behavior (workspace:
+ * protocol deps, `--filter`), and `npm run` may not even be installed on a
+ * pnpm/yarn/bun-only machine.
  */
 export function detectPackageManager(root: string): "npm" | "pnpm" | "yarn" | "bun" {
+  try {
+    const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { packageManager?: string };
+    // Corepack's field is "<name>@<version>" (optionally with a build hash
+    // after a "+") — only the name before "@" is needed here.
+    const name = pkg.packageManager?.split("@")[0];
+    if (name === "pnpm" || name === "yarn" || name === "npm" || name === "bun") return name;
+  } catch {
+    /* no/unreadable/invalid package.json — fall through to lockfile detection */
+  }
   if (existsSync(join(root, "pnpm-lock.yaml")) || existsSync(join(root, "pnpm-workspace.yaml"))) return "pnpm";
   if (existsSync(join(root, "yarn.lock"))) return "yarn";
   if (existsSync(join(root, "bun.lockb")) || existsSync(join(root, "bun.lock"))) return "bun";

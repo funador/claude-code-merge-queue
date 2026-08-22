@@ -60,6 +60,40 @@ test("detectPackageManager reads pnpm-lock.yaml, yarn.lock, and bun.lock", () =>
   }
 });
 
+test("detectPackageManager prefers package.json's packageManager field over the lockfile", () => {
+  const dir = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-pm-"));
+  try {
+    // Deliberately contradicts the lockfile present — the explicit field
+    // wins, since it's a deliberate declaration, not an inference.
+    writeFileSync(join(dir, "yarn.lock"), "");
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ packageManager: "pnpm@11.9.0" }));
+    assert.equal(detectPackageManager(dir), "pnpm");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("detectPackageManager reads packageManager without a lockfile at all", () => {
+  const dir = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-pm-"));
+  try {
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ packageManager: "bun@1.2.3" }));
+    assert.equal(detectPackageManager(dir), "bun");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("detectPackageManager falls back to the lockfile when packageManager is absent or unparseable", () => {
+  const dir = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-pm-"));
+  try {
+    writeFileSync(join(dir, "pnpm-lock.yaml"), "");
+    writeFileSync(join(dir, "package.json"), "not valid json");
+    assert.equal(detectPackageManager(dir), "pnpm");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("detectCheckCommand uses the project's actual package manager, not a hardcoded npm", () => {
   const dir = mkdtempSync(join(tmpdir(), "claude-code-merge-queue-detect-"));
   try {

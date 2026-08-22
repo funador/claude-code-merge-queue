@@ -17,18 +17,20 @@ import { checkPush, parseRefUpdates } from "../lib/check-push.js";
 import { runWorktreeCreateHook } from "../hooks/worktree-create.js";
 import { lanePort } from "../lib/lane-port.js";
 import { claudeMdSnippet, removeClaudeMdSnippet, replaceClaudeMdSnippet, MARKER, END_MARKER_PREFIX } from "../lib/claude-md-snippet.js";
-import { detectCheckCommand, runCheckCommand } from "../lib/check-command.js";
+import { detectCheckCommand, runCheckCommand, detectPackageManager } from "../lib/check-command.js";
 import {
   wireClaudeSettings,
   wireHuskyPrePush,
   ensureHooksPath,
   wirePackageJsonScripts,
   wirePreflightScript,
+  wireNpmrcPrePostScripts,
   PREFLIGHT_FILENAME,
   unwireClaudeSettings,
   unwireHuskyPrePush,
   removePreflightScript,
   unwirePackageJsonScripts,
+  unwireNpmrcPrePostScripts,
 } from "../lib/wire-hooks.js";
 import { resolveMainCheckout } from "../lib/main-checkout.js";
 import { pruneLandedLanes, findOrphanedLanes, describeOrphanedLane } from "../lib/prune-lanes.js";
@@ -231,6 +233,16 @@ export default ${JSON.stringify(generated, null, 2)};
       break;
   }
 
+  switch (wireNpmrcPrePostScripts(root)) {
+    case "added":
+      console.log(`${tag("init")} added "enable-pre-post-scripts=true" to .npmrc — pnpm skips "preland"/"presync" otherwise.`);
+      writtenFiles.push(".npmrc");
+      break;
+    case "already-wired":
+    case "not-applicable":
+      break;
+  }
+
   console.log("");
   console.log(bold("Next steps:"));
   if (writtenFiles.length > 0) {
@@ -314,6 +326,10 @@ async function uninstall(): Promise<void> {
     manual.push("package.json");
   }
 
+  if (unwireNpmrcPrePostScripts(root) === "removed") {
+    console.log(`${tag("uninstall")} removed "enable-pre-post-scripts=true" from .npmrc.`);
+  }
+
   const cfgPath = configPath(root);
   if (cfgPath) {
     const { rmSync } = await import("node:fs");
@@ -326,7 +342,13 @@ async function uninstall(): Promise<void> {
     console.log(yellow(`Left untouched, needs your own look: ${manual.join(", ")}.`));
     console.log("");
   }
-  console.log(bold("Last step, run it yourself: npm uninstall claude-code-merge-queue"));
+  const uninstallCommand: Record<ReturnType<typeof detectPackageManager>, string> = {
+    npm: "npm uninstall claude-code-merge-queue",
+    pnpm: "pnpm remove claude-code-merge-queue",
+    yarn: "yarn remove claude-code-merge-queue",
+    bun: "bun remove claude-code-merge-queue",
+  };
+  console.log(bold(`Last step, run it yourself: ${uninstallCommand[detectPackageManager(root)]}`));
   console.log(dim("(not run automatically — this command doesn't remove its own currently-executing package from node_modules.)"));
 }
 

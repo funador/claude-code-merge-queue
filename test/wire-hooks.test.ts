@@ -12,10 +12,12 @@ import {
   wirePreflightScript,
   preflightScriptContent,
   PREFLIGHT_FILENAME,
+  wireNpmrcPrePostScripts,
   unwireClaudeSettings,
   unwireHuskyPrePush,
   removePreflightScript,
   unwirePackageJsonScripts,
+  unwireNpmrcPrePostScripts,
 } from "../src/lib/wire-hooks.js";
 
 function scratchDir(): string {
@@ -253,6 +255,81 @@ test("wirePackageJsonScripts leaves unparseable package.json untouched", () => {
     writeFileSync(join(dir, "package.json"), "{ not valid json");
     assert.deepEqual(wirePackageJsonScripts(dir), { result: "unparseable", added: [] });
     assert.equal(readFileSync(join(dir, "package.json"), "utf8"), "{ not valid json");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("wireNpmrcPrePostScripts is a no-op for an npm consumer — npm needs no such setting", () => {
+  const dir = scratchDir();
+  try {
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "x" }));
+    assert.equal(wireNpmrcPrePostScripts(dir), "not-applicable");
+    assert.ok(!existsSync(join(dir, ".npmrc")), "must not create .npmrc for an npm consumer");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("wireNpmrcPrePostScripts creates .npmrc from scratch for a pnpm consumer", () => {
+  const dir = scratchDir();
+  try {
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ packageManager: "pnpm@11.9.0" }));
+    assert.equal(wireNpmrcPrePostScripts(dir), "added");
+    const written = readFileSync(join(dir, ".npmrc"), "utf8");
+    assert.match(written, /^enable-pre-post-scripts=true$/m);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("wireNpmrcPrePostScripts appends to an existing .npmrc without dropping what's already there", () => {
+  const dir = scratchDir();
+  try {
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ packageManager: "pnpm@11.9.0" }));
+    writeFileSync(join(dir, ".npmrc"), "strict-peer-dependencies=false\n");
+    assert.equal(wireNpmrcPrePostScripts(dir), "added");
+    const written = readFileSync(join(dir, ".npmrc"), "utf8");
+    assert.match(written, /strict-peer-dependencies=false/);
+    assert.match(written, /^enable-pre-post-scripts=true$/m);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("wireNpmrcPrePostScripts is idempotent, including when a human wrote the line themselves", () => {
+  const dir = scratchDir();
+  try {
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ packageManager: "pnpm@11.9.0" }));
+    writeFileSync(join(dir, ".npmrc"), "enable-pre-post-scripts=true\n");
+    assert.equal(wireNpmrcPrePostScripts(dir), "already-wired");
+    assert.equal(readFileSync(join(dir, ".npmrc"), "utf8"), "enable-pre-post-scripts=true\n");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("unwireNpmrcPrePostScripts removes only its own line (and comment), leaving other .npmrc content untouched", () => {
+  const dir = scratchDir();
+  try {
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ packageManager: "pnpm@11.9.0" }));
+    wireNpmrcPrePostScripts(dir);
+    writeFileSync(join(dir, ".npmrc"), readFileSync(join(dir, ".npmrc"), "utf8") + "auto-install-peers=false\n");
+    assert.equal(unwireNpmrcPrePostScripts(dir), "removed");
+    const written = readFileSync(join(dir, ".npmrc"), "utf8");
+    assert.ok(!written.includes("enable-pre-post-scripts"));
+    assert.match(written, /auto-install-peers=false/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("unwireNpmrcPrePostScripts reports not-found when there's nothing to remove", () => {
+  const dir = scratchDir();
+  try {
+    assert.equal(unwireNpmrcPrePostScripts(dir), "not-found");
+    writeFileSync(join(dir, ".npmrc"), "some-other-setting=1\n");
+    assert.equal(unwireNpmrcPrePostScripts(dir), "not-found");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

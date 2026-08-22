@@ -44,6 +44,22 @@ test("rejects a non-boolean autoLand", () => {
   assert.ok(problems.some((p) => /autoLand/.test(p)));
 });
 
+test("rejects a non-boolean installOnCreate", () => {
+  // @ts-expect-error deliberately malformed for the test
+  const problems = validateConfig({ ...DEFAULTS, installOnCreate: "yes" });
+  assert.ok(problems.some((p) => /installOnCreate/.test(p)));
+});
+
+test("rejects installOnCreate:true combined with node_modules in symlinks — pick one", () => {
+  const problems = validateConfig({ ...DEFAULTS, installOnCreate: true, symlinks: ["node_modules"] });
+  assert.ok(problems.some((p) => /installOnCreate is true AND symlinks includes/.test(p)));
+});
+
+test("accepts installOnCreate:true once node_modules is removed from symlinks", () => {
+  const problems = validateConfig({ ...DEFAULTS, installOnCreate: true, symlinks: [".env", ".env.local"] });
+  assert.deepEqual(problems, []);
+});
+
 test("accepts a valid two-stage config", () => {
   const problems = validateConfig({
     ...DEFAULTS,
