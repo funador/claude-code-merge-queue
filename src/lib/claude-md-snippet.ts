@@ -42,7 +42,7 @@ Parallel Claude Code lanes, no races — follow every session, unprompted:
 
 ${landBullet}
 - **A failed land isn't done** — fix the rebase conflict (\`git add\`, \`git rebase --continue\`), re-run \`land\` until it lands.
-- **Orphaned lane** (a \`⚠\` sibling with no session): ask the human, never delete. \`claude-code-merge-queue reconcile\` lists them.
+- **Orphaned lane** (a \`⚠\` sibling with no session): ask the human, never delete. \`claude-code-merge-queue reconcile\` lists them — this is also surfaced automatically at the start of every session, so don't wait to be asked.
 ${promoteBlock}
 ${END_MARKER}
 `;

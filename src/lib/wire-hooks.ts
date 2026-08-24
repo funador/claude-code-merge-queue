@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { detectPackageManager } from "./check-command.js";
 
 const HOOK_COMMAND = "npx claude-code-merge-queue hook worktree-create";
+const SESSION_START_HOOK_COMMAND = "npx claude-code-merge-queue hook session-start";
 const PRE_PUSH_MARKER = "claude-code-merge-queue check-push";
 // Shared verbatim between wireHuskyPrePush (writes it) and unwireHuskyPrePush
 // (finds it again to know exactly where its own appended block starts) — a
@@ -50,6 +51,11 @@ export type WireResult = "created" | "created-dir" | "merged" | "already-wired" 
 interface ClaudeSettings {
   hooks?: {
     WorktreeCreate?: Array<{ hooks: Array<{ type: string; command: string }> }>;
+    // No "matcher" on these entries: SessionStart fires on every sub-event
+    // (startup/resume/clear/compact/fork) when matcher is omitted — exactly
+    // what a reconcile-on-start advisory wants, since a lane can be left
+    // stranded whether the next session on it is a fresh start or a resume.
+    SessionStart?: Array<{ hooks: Array<{ type: string; command: string }> }>;
     [key: string]: unknown;
   };
   [key: string]: unknown;
@@ -62,7 +68,10 @@ export function wireClaudeSettings(root: string): WireResult {
   if (!existsSync(path)) {
     mkdirSync(dir, { recursive: true });
     const settings: ClaudeSettings = {
-      hooks: { WorktreeCreate: [{ hooks: [{ type: "command", command: HOOK_COMMAND }] }] },
+      hooks: {
+        WorktreeCreate: [{ hooks: [{ type: "command", command: HOOK_COMMAND }] }],
+        SessionStart: [{ hooks: [{ type: "command", command: SESSION_START_HOOK_COMMAND }] }],
+      },
     };
     writeFileSync(path, JSON.stringify(settings, null, 2) + "\n");
     return "created";
@@ -77,10 +86,15 @@ export function wireClaudeSettings(root: string): WireResult {
 
   settings.hooks ??= {};
   settings.hooks.WorktreeCreate ??= [];
-  const alreadyWired = settings.hooks.WorktreeCreate.some((group) => group.hooks?.some((h) => h.command?.includes(HOOK_COMMAND)));
-  if (alreadyWired) return "already-wired";
+  settings.hooks.SessionStart ??= [];
+  const worktreeCreateWired = settings.hooks.WorktreeCreate.some((group) => group.hooks?.some((h) => h.command?.includes(HOOK_COMMAND)));
+  const sessionStartWired = settings.hooks.SessionStart.some((group) =>
+    group.hooks?.some((h) => h.command?.includes(SESSION_START_HOOK_COMMAND)),
+  );
+  if (worktreeCreateWired && sessionStartWired) return "already-wired";
 
-  settings.hooks.WorktreeCreate.push({ hooks: [{ type: "command", command: HOOK_COMMAND }] });
+  if (!worktreeCreateWired) settings.hooks.WorktreeCreate.push({ hooks: [{ type: "command", command: HOOK_COMMAND }] });
+  if (!sessionStartWired) settings.hooks.SessionStart.push({ hooks: [{ type: "command", command: SESSION_START_HOOK_COMMAND }] });
   writeFileSync(path, JSON.stringify(settings, null, 2) + "\n");
   return "merged";
 }
@@ -349,7 +363,7 @@ export function unwireNpmrcPrePostScripts(root: string): "removed" | "not-found"
 
 export type UnwireResult = "removed" | "not-found" | "unparseable";
 
-/** The reverse of wireClaudeSettings: drops only our own WorktreeCreate hook entry, leaving every other hook untouched. */
+/** The reverse of wireClaudeSettings: drops only our own WorktreeCreate + SessionStart hook entries, leaving every other hook untouched. */
 export function unwireClaudeSettings(root: string): UnwireResult {
   const path = join(root, ".claude", "settings.json");
   if (!existsSync(path)) return "not-found";
@@ -361,17 +375,24 @@ export function unwireClaudeSettings(root: string): UnwireResult {
     return "unparseable"; // leave it alone — don't guess at broken JSON
   }
 
-  const groups = settings.hooks?.WorktreeCreate;
-  if (!groups) return "not-found";
-  const kept = groups.filter((group) => !group.hooks?.some((h) => h.command?.includes(HOOK_COMMAND)));
-  if (kept.length === groups.length) return "not-found"; // ours was never in there
+  const wtGroups = settings.hooks?.WorktreeCreate;
+  const ssGroups = settings.hooks?.SessionStart;
+  const wtKept = wtGroups?.filter((group) => !group.hooks?.some((h) => h.command?.includes(HOOK_COMMAND)));
+  const ssKept = ssGroups?.filter((group) => !group.hooks?.some((h) => h.command?.includes(SESSION_START_HOOK_COMMAND)));
 
-  if (kept.length > 0) {
-    settings.hooks!.WorktreeCreate = kept;
-  } else {
-    delete settings.hooks!.WorktreeCreate;
-    if (Object.keys(settings.hooks!).length === 0) delete settings.hooks;
+  const wtChanged = wtGroups !== undefined && wtKept!.length !== wtGroups.length;
+  const ssChanged = ssGroups !== undefined && ssKept!.length !== ssGroups.length;
+  if (!wtChanged && !ssChanged) return "not-found"; // ours was never in there
+
+  if (wtChanged) {
+    if (wtKept!.length > 0) settings.hooks!.WorktreeCreate = wtKept;
+    else delete settings.hooks!.WorktreeCreate;
   }
+  if (ssChanged) {
+    if (ssKept!.length > 0) settings.hooks!.SessionStart = ssKept;
+    else delete settings.hooks!.SessionStart;
+  }
+  if (settings.hooks && Object.keys(settings.hooks).length === 0) delete settings.hooks;
   writeFileSync(path, JSON.stringify(settings, null, 2) + "\n");
   return "removed";
 }

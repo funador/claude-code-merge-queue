@@ -15,6 +15,7 @@ import { buildLock } from "../build-lock.js";
 import { findRepoRoot, hasConfig, loadConfig, detectCurrentBranch, configPath, DEFAULTS } from "../lib/config.js";
 import { checkPush, parseRefUpdates } from "../lib/check-push.js";
 import { runWorktreeCreateHook } from "../hooks/worktree-create.js";
+import { runSessionStartHook } from "../hooks/session-start.js";
 import { lanePort } from "../lib/lane-port.js";
 import { claudeMdSnippet, removeClaudeMdSnippet, replaceClaudeMdSnippet, MARKER, END_MARKER_PREFIX } from "../lib/claude-md-snippet.js";
 import { detectCheckCommand, runCheckCommand, detectPackageManager } from "../lib/check-command.js";
@@ -361,7 +362,8 @@ async function main(): Promise<void> {
     case "hook": {
       const sub = rest[0];
       if (sub === "worktree-create") return runWorktreeCreateHook();
-      console.error(red(`claude-code-merge-queue hook: unknown hook "${sub ?? ""}". Only "worktree-create" is supported.`));
+      if (sub === "session-start") return runSessionStartHook();
+      console.error(red(`claude-code-merge-queue hook: unknown hook "${sub ?? ""}". Only "worktree-create" and "session-start" are supported.`));
       process.exit(1);
       return;
     }
@@ -533,6 +535,7 @@ async function main(): Promise<void> {
         ["claude-code-merge-queue build-lock -- <cmd>", "run <cmd>, serialized across every lane"],
         ["claude-code-merge-queue port", "print this lane's dev-server port"],
         ["claude-code-merge-queue hook worktree-create", "(Claude Code WorktreeCreate hook — not for direct use)"],
+        ["claude-code-merge-queue hook session-start", "(Claude Code SessionStart hook — not for direct use)"],
         ["claude-code-merge-queue check-push", "(used by the pre-push hook — not for direct use)"],
       ];
       const width = Math.max(...usage.map(([u]) => u.length)) + 2;

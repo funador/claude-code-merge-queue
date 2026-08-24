@@ -36,6 +36,8 @@ test("wireClaudeSettings creates .claude/settings.json from scratch", () => {
     assert.equal(wireClaudeSettings(dir), "created");
     const written = JSON.parse(readFileSync(join(dir, ".claude", "settings.json"), "utf8"));
     assert.equal(written.hooks.WorktreeCreate[0].hooks[0].command, "npx claude-code-merge-queue hook worktree-create");
+    assert.equal(written.hooks.SessionStart[0].hooks[0].command, "npx claude-code-merge-queue hook session-start");
+    assert.equal(written.hooks.SessionStart[0].matcher, undefined, "no matcher — must fire on every SessionStart sub-event");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -53,6 +55,7 @@ test("wireClaudeSettings merges into an existing settings.json without dropping 
     const written = JSON.parse(readFileSync(join(dir, ".claude", "settings.json"), "utf8"));
     assert.equal(written.hooks.PreToolUse[0].hooks[0].command, "echo hi", "existing hook must survive");
     assert.equal(written.hooks.WorktreeCreate[0].hooks[0].command, "npx claude-code-merge-queue hook worktree-create");
+    assert.equal(written.hooks.SessionStart[0].hooks[0].command, "npx claude-code-merge-queue hook session-start");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -63,6 +66,23 @@ test("wireClaudeSettings is idempotent", () => {
   try {
     wireClaudeSettings(dir);
     assert.equal(wireClaudeSettings(dir), "already-wired");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("wireClaudeSettings adds the missing SessionStart entry when only WorktreeCreate was wired by hand", () => {
+  const dir = scratchDir();
+  try {
+    mkdirSync(join(dir, ".claude"));
+    writeFileSync(
+      join(dir, ".claude", "settings.json"),
+      JSON.stringify({ hooks: { WorktreeCreate: [{ hooks: [{ type: "command", command: "npx claude-code-merge-queue hook worktree-create" }] }] } }),
+    );
+    assert.equal(wireClaudeSettings(dir), "merged");
+    const written = JSON.parse(readFileSync(join(dir, ".claude", "settings.json"), "utf8"));
+    assert.equal(written.hooks.WorktreeCreate.length, 1, "must not duplicate the already-present WorktreeCreate entry");
+    assert.equal(written.hooks.SessionStart[0].hooks[0].command, "npx claude-code-merge-queue hook session-start");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -420,6 +440,30 @@ test("unwireClaudeSettings removes only our WorktreeCreate entry, leaving other 
     assert.equal(written.hooks.PreToolUse[0].hooks[0].command, "echo hi", "unrelated hook must survive");
     assert.equal(written.hooks.WorktreeCreate.length, 1, "only our own entry is removed");
     assert.equal(written.hooks.WorktreeCreate[0].hooks[0].command, "echo also-mine-but-not-ours");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("unwireClaudeSettings removes only our SessionStart entry, leaving other SessionStart entries alone", () => {
+  const dir = scratchDir();
+  try {
+    mkdirSync(join(dir, ".claude"));
+    writeFileSync(
+      join(dir, ".claude", "settings.json"),
+      JSON.stringify({
+        hooks: {
+          SessionStart: [
+            { hooks: [{ type: "command", command: "npx claude-code-merge-queue hook session-start" }] },
+            { hooks: [{ type: "command", command: "echo also-mine-but-not-ours" }] },
+          ],
+        },
+      }),
+    );
+    assert.equal(unwireClaudeSettings(dir), "removed");
+    const written = JSON.parse(readFileSync(join(dir, ".claude", "settings.json"), "utf8"));
+    assert.equal(written.hooks.SessionStart.length, 1, "only our own entry is removed");
+    assert.equal(written.hooks.SessionStart[0].hooks[0].command, "echo also-mine-but-not-ours");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
