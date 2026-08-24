@@ -88,6 +88,31 @@ test("wireClaudeSettings adds the missing SessionStart entry when only WorktreeC
   }
 });
 
+// Real case: hola swept npx -> `pnpm exec` repo-wide (ca7a63cd). A literal-
+// npx-string match would treat that as unwired and add a REDUNDANT second
+// entry — two hooks firing on every worktree/session-start event.
+test("wireClaudeSettings recognizes a runner-customized command (pnpm exec, not npx) as already wired — no duplicate entry", () => {
+  const dir = scratchDir();
+  try {
+    mkdirSync(join(dir, ".claude"));
+    writeFileSync(
+      join(dir, ".claude", "settings.json"),
+      JSON.stringify({
+        hooks: {
+          WorktreeCreate: [{ hooks: [{ type: "command", command: "pnpm exec claude-code-merge-queue hook worktree-create" }] }],
+          SessionStart: [{ hooks: [{ type: "command", command: "pnpm exec claude-code-merge-queue hook session-start" }] }],
+        },
+      }),
+    );
+    assert.equal(wireClaudeSettings(dir), "already-wired");
+    const written = JSON.parse(readFileSync(join(dir, ".claude", "settings.json"), "utf8"));
+    assert.equal(written.hooks.WorktreeCreate.length, 1, "must not add a redundant npx entry alongside the pnpm-exec one");
+    assert.equal(written.hooks.SessionStart.length, 1, "must not add a redundant npx entry alongside the pnpm-exec one");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("wireClaudeSettings leaves unparseable JSON untouched", () => {
   const dir = scratchDir();
   try {
@@ -464,6 +489,27 @@ test("unwireClaudeSettings removes only our SessionStart entry, leaving other Se
     const written = JSON.parse(readFileSync(join(dir, ".claude", "settings.json"), "utf8"));
     assert.equal(written.hooks.SessionStart.length, 1, "only our own entry is removed");
     assert.equal(written.hooks.SessionStart[0].hooks[0].command, "echo also-mine-but-not-ours");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("unwireClaudeSettings recognizes a runner-customized command (pnpm exec, not npx) as ours to remove", () => {
+  const dir = scratchDir();
+  try {
+    mkdirSync(join(dir, ".claude"));
+    writeFileSync(
+      join(dir, ".claude", "settings.json"),
+      JSON.stringify({
+        hooks: {
+          WorktreeCreate: [{ hooks: [{ type: "command", command: "pnpm exec claude-code-merge-queue hook worktree-create" }] }],
+          SessionStart: [{ hooks: [{ type: "command", command: "pnpm exec claude-code-merge-queue hook session-start" }] }],
+        },
+      }),
+    );
+    assert.equal(unwireClaudeSettings(dir), "removed");
+    const written = JSON.parse(readFileSync(join(dir, ".claude", "settings.json"), "utf8"));
+    assert.deepEqual(written, {}, "a runner-customized entry must not be left behind on uninstall");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

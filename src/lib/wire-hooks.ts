@@ -17,6 +17,19 @@ import { detectPackageManager } from "./check-command.js";
 
 const HOOK_COMMAND = "npx claude-code-merge-queue hook worktree-create";
 const SESSION_START_HOOK_COMMAND = "npx claude-code-merge-queue hook session-start";
+// The invocation WITHOUT its runner prefix (npx / pnpm exec / yarn dlx /
+// bunx / ...) — used for "is this already wired?" detection instead of the
+// full npx-prefixed string. A consumer that's swept npx -> `pnpm exec`
+// repo-wide (a real case: hola's ca7a63cd) has a WorktreeCreate command that
+// doesn't literally contain HOOK_COMMAND, even though it's unmistakably the
+// same hook. Matching on the full string caused both a wire() bug (a second,
+// redundant npx-prefixed entry got added alongside the customized one — two
+// hooks firing on every worktree creation) and a matching unwire() bug (the
+// customized entry would never be recognized as ours, so uninstall silently
+// left it behind). Matching on the invocation only, regardless of runner,
+// fixes both directions at once.
+const HOOK_INVOCATION = "claude-code-merge-queue hook worktree-create";
+const SESSION_START_HOOK_INVOCATION = "claude-code-merge-queue hook session-start";
 const PRE_PUSH_MARKER = "claude-code-merge-queue check-push";
 // Shared verbatim between wireHuskyPrePush (writes it) and unwireHuskyPrePush
 // (finds it again to know exactly where its own appended block starts) — a
@@ -87,9 +100,9 @@ export function wireClaudeSettings(root: string): WireResult {
   settings.hooks ??= {};
   settings.hooks.WorktreeCreate ??= [];
   settings.hooks.SessionStart ??= [];
-  const worktreeCreateWired = settings.hooks.WorktreeCreate.some((group) => group.hooks?.some((h) => h.command?.includes(HOOK_COMMAND)));
+  const worktreeCreateWired = settings.hooks.WorktreeCreate.some((group) => group.hooks?.some((h) => h.command?.includes(HOOK_INVOCATION)));
   const sessionStartWired = settings.hooks.SessionStart.some((group) =>
-    group.hooks?.some((h) => h.command?.includes(SESSION_START_HOOK_COMMAND)),
+    group.hooks?.some((h) => h.command?.includes(SESSION_START_HOOK_INVOCATION)),
   );
   if (worktreeCreateWired && sessionStartWired) return "already-wired";
 
@@ -377,8 +390,8 @@ export function unwireClaudeSettings(root: string): UnwireResult {
 
   const wtGroups = settings.hooks?.WorktreeCreate;
   const ssGroups = settings.hooks?.SessionStart;
-  const wtKept = wtGroups?.filter((group) => !group.hooks?.some((h) => h.command?.includes(HOOK_COMMAND)));
-  const ssKept = ssGroups?.filter((group) => !group.hooks?.some((h) => h.command?.includes(SESSION_START_HOOK_COMMAND)));
+  const wtKept = wtGroups?.filter((group) => !group.hooks?.some((h) => h.command?.includes(HOOK_INVOCATION)));
+  const ssKept = ssGroups?.filter((group) => !group.hooks?.some((h) => h.command?.includes(SESSION_START_HOOK_INVOCATION)));
 
   const wtChanged = wtGroups !== undefined && wtKept!.length !== wtGroups.length;
   const ssChanged = ssGroups !== undefined && ssKept!.length !== ssGroups.length;
